@@ -25,6 +25,20 @@
 *.log
 *.sql
 *.sqlite
+*.db
+*.db-wal
+*.db-shm
+
+# The schema is source, not a database dump — the app cannot start without it.
+!server/src/db/schema.sql
+
+# Runtime data (SQLite database lives here)
+data/
+
+# Local environment / secrets
+.env
+.env.local
+.env.*.local
 
 # OS generated files #
 ######################
@@ -50,3 +64,6 @@ build/
 
 # Impeccable local cache
 .impeccable/hook.cache.json
+
+# TypeScript build metadata
+*.tsbuildinfo
