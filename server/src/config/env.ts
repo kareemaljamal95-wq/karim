@@ -54,6 +54,12 @@ export const env = {
   /** Demo mode is forced on whenever no live data source is configured. */
   demoMode: bool(process.env.DEMO_MODE, true),
   /**
+   * Seeds the labelled demo dataset on boot, but only while the lead table is
+   * empty. Exists for deployments, where there is no shell to run `npm run
+   * seed` from. Seeded records are flagged as demo data like any other.
+   */
+  seedDemoData: bool(process.env.SEED_DEMO_DATA, false),
+  /**
    * Master kill-switch for outbound messaging. The MVP ships with sending
    * disabled: every message must pass through human approval, and even an
    * approved message is only dispatched when a channel integration is

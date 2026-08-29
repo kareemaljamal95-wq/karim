@@ -110,6 +110,10 @@ data is real:
 The header shows the live state at all times: *Demo data / Live discovery*, *Rule engine / Claude
 reasoning*, and *Sending disabled / enabled*.
 
+On a deployed instance there is no shell to run `npm run seed` from, so setting `SEED_DEMO_DATA=true`
+seeds the same dataset on boot — once only, while the lead table is still empty, in the background so
+health checks are unaffected. Locally, use `npm run seed`.
+
 Connect integrations from **Integrations** (admin only). Credentials are encrypted at rest with
 AES-256-GCM and are never returned to the browser — the API exposes masked hints and connection state
 only. Keys supplied via environment variables are picked up automatically.

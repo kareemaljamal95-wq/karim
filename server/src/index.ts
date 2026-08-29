@@ -13,6 +13,8 @@ import { seedAgents } from './agents/registry';
 import { seedWorkflows } from './services/workflows';
 import { ensureIntegrationRows } from './services/integrations';
 import { ensureBootstrapAdmin } from './services/users';
+import { listLeads } from './services/leads';
+import { seedDemoData } from './db/seed-demo';
 import { log } from './services/logger';
 
 export function createApp(): express.Express {
@@ -82,6 +84,27 @@ export function bootstrap(): void {
   }
 }
 
+/**
+ * Runs the demo dataset once, in the background, when `SEED_DEMO_DATA` is on
+ * and no leads exist yet. It runs after the server is listening so health
+ * checks answer immediately, and a failure is logged rather than fatal — an
+ * empty dashboard is a much smaller problem than a server that will not boot.
+ */
+function seedDemoDataIfRequested(): void {
+  if (!env.seedDemoData) return;
+  if (listLeads({ limit: 1 }).total > 0) return;
+
+  seedDemoData().catch((error: unknown) => {
+    // eslint-disable-next-line no-console
+    console.error('Demo seeding failed:', error);
+    log({
+      actorType: 'system',
+      action: 'system.seed_failed',
+      message: `Demo seeding failed: ${error instanceof Error ? error.message : String(error)}`,
+    });
+  });
+}
+
 if (require.main === module) {
   bootstrap();
   const app = createApp();
@@ -93,5 +116,6 @@ if (require.main === module) {
           env.outboundSendingEnabled ? 'ENABLED' : 'disabled (MVP default)'
         }`,
     );
+    seedDemoDataIfRequested();
   });
 }
