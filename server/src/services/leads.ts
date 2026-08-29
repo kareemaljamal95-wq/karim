@@ -432,7 +432,9 @@ export function leadFilterOptions(): {
   categories: string[];
   services: string[];
 } {
-  const cities = (db().prepare('SELECT DISTINCT city FROM leads WHERE city != "" ORDER BY city').all() as {
+  // Single quotes: SQLite reads "" as an identifier, so the double-quoted form
+  // fails with `no such column: ""` as soon as the query actually runs.
+  const cities = (db().prepare("SELECT DISTINCT city FROM leads WHERE city != '' ORDER BY city").all() as {
     city: string;
   }[]).map((r) => r.city);
   const categories = (
