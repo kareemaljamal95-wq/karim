@@ -96,7 +96,7 @@ messagesRouter.post(
   '/:id/send',
   requireOperator,
   asyncHandler(async (req, res) => {
-    const result = sendMessage(req.params.id, actorOf(req));
+    const result = await sendMessage(req.params.id, actorOf(req));
     res.json(result);
   }),
 );

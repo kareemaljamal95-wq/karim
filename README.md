@@ -43,15 +43,18 @@ discover businesses                                    save to lead database
 
 This is the part that matters most, and it is enforced in code rather than in prompts alone.
 
-**Nothing is sent autonomously.** Three independent conditions must all hold before a message can
+**Nothing is sent autonomously.** Four independent conditions must all hold before a message can
 leave the platform:
 
 1. a human approved it,
-2. `OUTBOUND_SENDING_ENABLED=true` in the environment **and** the Settings toggle is on, and
-3. the channel's integration is connected.
+2. `OUTBOUND_SENDING_ENABLED=true` in the environment **and** the Settings toggle is on,
+3. the channel's integration is connected, and
+4. the day's outreach cap still has room.
 
-Until then an approved message stays queued, and the UI says so explicitly. Autonomous mass messaging
-is deliberately not implemented.
+Until then an approved message stays queued, and the UI says so explicitly. A message becomes `SENT`
+only when the provider accepted it — a delivery that failed leaves it `APPROVED` with the reason,
+never a status that overstates what happened. Autonomous mass messaging is deliberately not
+implemented.
 
 **Approval is required before** the first external message, any commercial commitment, any price
 agreement, accepting a project, sending deliverables, and any other irreversible action.
@@ -225,16 +228,20 @@ or an approval kind changes what the next run does.
 4. Fill in company identity, approved claims and the pricing policy so the agents have real
    boundaries to work within.
 
-Messages still require per-message human approval. The dispatch call sites are isolated in
-`server/src/services/messages.ts` so wiring a real provider touches one function.
+Messages still require per-message human approval, and a fourth gate applies: the daily outreach cap
+in Settings. Email is delivered over Gmail SMTP, which needs the sending address and a Google App
+Password (2-step verification on — an account password will not work). A message is recorded as SENT
+only once the provider accepted it; a failed delivery leaves it APPROVED with the reason attached,
+because a status that overstates what happened is worse than no automation. WhatsApp is not wired to a
+provider yet and says so rather than pretending.
 
 ---
 
 ## Notes and limits
 
 - SQLite is used for portability; the data layer is small and isolated if you move to Postgres.
-- Channel delivery is gated and stubbed — approval, queueing, status and audit are real; the network
-  call to a provider is the piece to implement when you connect one.
+- Email delivery is real (Gmail SMTP). WhatsApp, SMS and LinkedIn are modelled end to end — approval,
+  queueing, status and audit — but have no provider wired, and a send over them reports exactly that.
 - Signals depend on what the source can prove, encoded in `SOURCE_PROVES_ABSENCE`
   (`server/src/domain/business.ts`). Places lists every website and phone it knows, so a blank there
   is evidence; it never exposes emails or social profiles, so a blank there is not. OpenStreetMap is

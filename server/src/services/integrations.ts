@@ -70,15 +70,15 @@ export const INTEGRATION_CATALOG: IntegrationCatalogEntry[] = [
   },
   {
     key: 'gmail',
-    name: 'Gmail',
+    name: 'Gmail (SMTP)',
     category: 'communication',
-    description: 'Email delivery channel. Approved messages can be dispatched once connected and sending is enabled.',
+    description:
+      'Email delivery over Gmail SMTP. Needs the sending address and a Google App Password — 2-step verification must be on, and an ordinary account password will not work. Connecting it does not start sending: a message still needs human approval, the environment switch and the Settings toggle.',
     fields: [
-      { key: 'clientId', label: 'OAuth client ID', secret: false },
-      { key: 'clientSecret', label: 'OAuth client secret', secret: true },
-      { key: 'refreshToken', label: 'Refresh token', secret: true },
+      { key: 'user', label: 'Sending address', secret: false, placeholder: 'you@gmail.com' },
+      { key: 'appPassword', label: 'Google App Password', secret: true, placeholder: '16 characters' },
     ],
-    capabilities: ['Send approved outreach', 'Read replies for the Conversation Agent'],
+    capabilities: ['Send approved outreach', 'Replies arrive in the mailbox itself'],
   },
   {
     key: 'whatsapp_business',

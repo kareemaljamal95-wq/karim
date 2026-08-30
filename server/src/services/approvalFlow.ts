@@ -21,12 +21,12 @@ export interface DecisionResult {
  * which keeps the "nothing irreversible without a human" rule enforceable in
  * one reviewable spot.
  */
-export function decideApproval(
+export async function decideApproval(
   id: string,
   decision: 'APPROVED' | 'REJECTED',
   actor: string,
   note?: string,
-): DecisionResult {
+): Promise<DecisionResult> {
   const approval = recordDecision(id, decision, actor, note);
   const effects: string[] = [];
   let dispatched = false;
@@ -34,7 +34,7 @@ export function decideApproval(
   if (decision === 'REJECTED') {
     applyRejection(approval, actor, note, effects);
   } else {
-    dispatched = applyApproval(approval, actor, effects);
+    dispatched = await applyApproval(approval, actor, effects);
   }
 
   if (approval.runId) maybeCompleteRun(approval.runId);
@@ -42,7 +42,7 @@ export function decideApproval(
   return { approval, effects, dispatched };
 }
 
-function applyApproval(approval: Approval, actor: string, effects: string[]): boolean {
+async function applyApproval(approval: Approval, actor: string, effects: string[]): Promise<boolean> {
   const settings = getSettings();
   let dispatched = false;
 
@@ -60,7 +60,7 @@ function applyApproval(approval: Approval, actor: string, effects: string[]): bo
       if (settings.outboundSendingEnabled) {
         for (const draft of listMessages({ leadId: approval.entityId, status: 'APPROVED' })) {
           try {
-            const result = sendMessage(draft.id, actor);
+            const result = await sendMessage(draft.id, actor);
             if (result.dispatched) {
               dispatched = true;
               effects.push(`Dispatched the ${draft.channel} message.`);
@@ -88,7 +88,7 @@ function applyApproval(approval: Approval, actor: string, effects: string[]): bo
       effects.push('Message approved.');
       if (settings.outboundSendingEnabled) {
         try {
-          const result = sendMessage(approval.entityId, actor);
+          const result = await sendMessage(approval.entityId, actor);
           dispatched = result.dispatched;
           effects.push(result.reason);
         } catch (error) {

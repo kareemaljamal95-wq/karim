@@ -61,7 +61,7 @@ approvalsRouter.post(
   requireOperator,
   asyncHandler(async (req, res) => {
     const { decision, note } = decisionSchema.parse(req.body);
-    const result = decideApproval(req.params.id, decision, actorOf(req), note);
+    const result = await decideApproval(req.params.id, decision, actorOf(req), note);
     res.json(result);
   }),
 );

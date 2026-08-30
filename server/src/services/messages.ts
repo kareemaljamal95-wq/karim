@@ -3,7 +3,8 @@ import { newId } from '../util/crypto';
 import { badRequest, conflict, failedDependency, notFound } from '../util/errors';
 import type { MessageChannel, MessageStatus } from '../types';
 import type { MessageQuality } from '../agents/outreachAgent';
-import { isActive } from './integrations';
+import { getCredentials, isActive } from './integrations';
+import { buildEmail, deliverEmail } from '../tools/emailDelivery';
 import { getSettings } from './settings';
 import { log } from './logger';
 import { getLead, updateLead } from './leads';
@@ -209,15 +210,61 @@ const CHANNEL_INTEGRATION: Record<MessageChannel, 'gmail' | 'whatsapp_business' 
   linkedin: null,
 };
 
+/** How many messages actually left the platform since midnight UTC. */
+function countSentToday(): number {
+  const since = new Date();
+  since.setUTCHours(0, 0, 0, 0);
+  const row = db()
+    .prepare(`SELECT COUNT(*) AS c FROM messages WHERE status = 'SENT' AND sent_at >= @since`)
+    .get({ since: since.toISOString() }) as { c: number };
+  return row.c;
+}
+
+/**
+ * Hands the message to the channel that owns it.
+ *
+ * Only email is wired to a provider today. A channel without one reports that
+ * plainly rather than pretending the message went out — the caller then leaves
+ * it approved and queued.
+ */
+async function deliverChannel(
+  message: Message,
+  settings: ReturnType<typeof getSettings>,
+): Promise<{ delivered: boolean; detail: string }> {
+  if (message.channel !== 'email') {
+    return {
+      delivered: false,
+      detail: `Delivery over ${message.channel} is not implemented yet, so nothing was sent.`,
+    };
+  }
+
+  const lead = getLead(message.leadId);
+  if (!lead.email) {
+    return { delivered: false, detail: 'This lead has no email address on record.' };
+  }
+
+  const account = getCredentials('gmail').user?.trim();
+  if (!account) {
+    return { delivered: false, detail: 'The email connector has no sending address configured.' };
+  }
+
+  return deliverEmail(buildEmail(message, lead.email, account, settings));
+}
+
 /**
  * Dispatch gate for approved messages.
  *
- * Three independent conditions must all hold before anything leaves the
- * platform: the message is approved, outbound sending is switched on, and the
- * channel's integration is connected. Until then the message stays APPROVED and
- * is queued — which is the intended MVP behaviour, not an error.
+ * Four independent conditions must all hold before anything leaves the
+ * platform: the message is approved, outbound sending is switched on, the
+ * channel's integration is connected, and today's outreach cap has room. Until
+ * then the message stays APPROVED and is queued — which is the intended MVP
+ * behaviour, not an error.
+ *
+ * A message is only recorded as SENT once the provider actually accepted it. A
+ * failed delivery leaves it APPROVED with the reason attached, because a status
+ * that overstates what happened is worse than no automation at all.
  */
-export function sendMessage(id: string, actor: string): SendOutcome {
+export async function sendMessage(id: string, actor: string): Promise<SendOutcome> {
   const message = getMessage(id);
   const settings = getSettings();
 
@@ -242,8 +289,33 @@ export function sendMessage(id: string, actor: string): SendOutcome {
     );
   }
 
-  // Real dispatch is performed by the channel integration once implemented.
-  // The gate above is what makes enabling it a deliberate, auditable act.
+  const sentToday = countSentToday();
+  if (sentToday >= settings.dailyOutreachCap) {
+    return {
+      message,
+      dispatched: false,
+      reason: `Today's outreach cap of ${settings.dailyOutreachCap} has been reached (${sentToday} sent). The message stays approved and can go out tomorrow, or raise the cap in Settings.`,
+    };
+  }
+
+  const delivery = await deliverChannel(message, settings);
+  if (!delivery.delivered) {
+    log({
+      level: 'warn',
+      actorType: 'user',
+      actor,
+      action: 'message.delivery_failed',
+      entityType: 'message',
+      entityId: id,
+      message: `Delivery to ${message.leadName} failed: ${delivery.detail}`,
+    });
+    return {
+      message,
+      dispatched: false,
+      reason: `The message was not delivered and stays approved. ${delivery.detail}`,
+    };
+  }
+
   const now = nowIso();
   db()
     .prepare(`UPDATE messages SET status = 'SENT', sent_at = @ts, updated_at = @ts WHERE id = @id`)
@@ -272,10 +344,10 @@ export function sendMessage(id: string, actor: string): SendOutcome {
     action: 'message.sent',
     entityType: 'message',
     entityId: id,
-    message: `Message dispatched to ${message.leadName} over ${message.channel}`,
+    message: `Message delivered to ${message.leadName} over ${message.channel}. ${delivery.detail}`,
   });
 
-  return { message: getMessage(id), dispatched: true, reason: 'Message dispatched.' };
+  return { message: getMessage(id), dispatched: true, reason: delivery.detail };
 }
 
 export function messageStats(): { total: number; pending: number; approved: number; sent: number } {
