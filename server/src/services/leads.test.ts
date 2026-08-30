@@ -62,4 +62,31 @@ describe('lead queries run against SQLite', () => {
     assert.equal(listLeads({ search: 'Bakery' }).total, 1);
     assert.equal(listLeads({ minScore: 100 }).total, 0);
   });
+
+  test('purging demo data leaves live records untouched', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { purgeDemoData } = require('./leads') as typeof import('./leads');
+    upsertLead({
+      business: {
+        name: 'Sample Cafe',
+        category: 'Cafes',
+        country: 'United Arab Emirates',
+        city: 'Dubai',
+        area: '',
+        source: 'demo',
+        isDemo: true,
+        externalId: 'demo:cafe:1',
+      },
+    });
+    const liveBefore = listLeads({ liveOnly: true }).total;
+    assert.ok(listLeads({ demoOnly: true }).total > 0);
+
+    const removed = purgeDemoData('tester');
+
+    assert.ok(removed.leads > 0);
+    assert.equal(listLeads({ demoOnly: true }).total, 0);
+    assert.equal(listLeads({ liveOnly: true }).total, liveBefore, 'live records survive');
+    assert.deepEqual(purgeDemoData('tester'), { leads: 0, messages: 0, approvals: 0 }, 'safe to repeat');
+  });
+
 });

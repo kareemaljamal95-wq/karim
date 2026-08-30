@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Save, ShieldAlert, Users } from 'lucide-react';
+import { Plus, Save, ShieldAlert, Trash2, Users } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAction, useAuth, useQuery, useSystemStatus } from '../lib/hooks';
 import { dateOnly } from '../lib/format';
@@ -38,7 +38,7 @@ const ROLE_DESCRIPTIONS: Record<string, string> = {
 
 export function SettingsPage() {
   const { can } = useAuth();
-  const { refresh } = useSystemStatus();
+  const { status, refresh } = useSystemStatus();
   const { run, pending } = useAction();
   const { data, loading, error, refetch } = useQuery<SettingsResponse>('/system/settings');
   const { data: catalog } = useQuery<CatalogResponse>('/system/catalog');
@@ -106,6 +106,37 @@ export function SettingsPage() {
       />
 
       {!can('admin') && <InfoNote>Settings are admin-only. You are viewing them read-only.</InfoNote>}
+
+      {can('admin') && (status?.demoLeads ?? 0) > 0 && (
+        <Card>
+          <SectionTitle>Demo data</SectionTitle>
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            {status?.demoLeads} demo record{status?.demoLeads === 1 ? '' : 's'} are in the database. They exist so
+            the pipeline can be learned before real leads arrive; once it has been, they crowd the approvals
+            queue with samples that can never be contacted. Removing them deletes those leads and their
+            messages, approvals and conversations. Live records are not touched, and this cannot be undone.
+          </p>
+          <button
+            type="button"
+            className="btn-secondary mt-4 text-rose-600 dark:text-rose-400"
+            disabled={pending}
+            onClick={() => {
+              if (!window.confirm(`Remove ${status?.demoLeads} demo record(s) and everything attached to them?`))
+                return;
+              void run(
+                () => api<{ removed: { leads: number; messages: number; approvals: number } }>(
+                  '/system/demo-data/clear',
+                  { method: 'POST', body: { confirm: true } },
+                ),
+                { success: 'Demo records removed', onSuccess: refresh },
+              );
+            }}
+          >
+            {pending ? <Spinner /> : <Trash2 className="h-4 w-4" />}
+            Remove demo records
+          </button>
+        </Card>
+      )}
 
       <Card>
         <SectionTitle>Outbound safety</SectionTitle>

@@ -11,7 +11,7 @@ import {
 } from '../services/integrations';
 import { listLogs } from '../services/logger';
 import { listApprovals } from '../services/approvals';
-import { listLeads } from '../services/leads';
+import { listLeads, purgeDemoData } from '../services/leads';
 import { listMessages } from '../services/messages';
 import { listRuns } from '../services/runs';
 import { SERVICE_CATALOG } from '../domain/services';
@@ -125,6 +125,20 @@ systemRouter.patch(
     }
     const settings = updateSettings(patch);
     res.json({ settings });
+  }),
+);
+
+/**
+ * Removes the labelled demo dataset. Admin only, and irreversible — the caller
+ * must confirm explicitly so it cannot happen by a stray request.
+ */
+systemRouter.post(
+  '/demo-data/clear',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const { confirm } = z.object({ confirm: z.literal(true) }).parse(req.body ?? {});
+    if (!confirm) throw badRequest('Confirmation is required.');
+    res.json({ removed: purgeDemoData(actorOf(req)) });
   }),
 );
 

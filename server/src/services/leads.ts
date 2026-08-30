@@ -441,6 +441,55 @@ export function deleteLead(id: string, actor: string): void {
   });
 }
 
+export interface DemoPurge {
+  leads: number;
+  messages: number;
+  approvals: number;
+}
+
+/**
+ * Removes every demo record and everything attached to it.
+ *
+ * Demo data exists so an operator can learn the pipeline before real leads
+ * arrive. Once they have, it becomes noise in the very queues that decide what
+ * gets sent — an approvals list of samples is a list nobody reads carefully.
+ * Live records are never touched, and the counts are returned so the caller can
+ * report exactly what went.
+ */
+export function purgeDemoData(actor: string): DemoPurge {
+  const leadIds = (db().prepare('SELECT id FROM leads WHERE is_demo = 1').all() as { id: string }[]).map(
+    (row) => row.id,
+  );
+  if (!leadIds.length) return { leads: 0, messages: 0, approvals: 0 };
+
+  const placeholders = leadIds.map(() => '?').join(',');
+  const messageIds = (
+    db().prepare(`SELECT id FROM messages WHERE lead_id IN (${placeholders})`).all(...leadIds) as {
+      id: string;
+    }[]
+  ).map((row) => row.id);
+
+  // Approvals point at their subject by id rather than by foreign key, so they
+  // would outlive the record they belong to.
+  const entityIds = [...leadIds, ...messageIds];
+  const approvalPlaceholders = entityIds.map(() => '?').join(',');
+  const approvals = db()
+    .prepare(`DELETE FROM approvals WHERE entity_id IN (${approvalPlaceholders})`)
+    .run(...entityIds).changes;
+
+  // Messages, conversations and projects cascade from the lead row.
+  const leads = db().prepare(`DELETE FROM leads WHERE id IN (${placeholders})`).run(...leadIds).changes;
+
+  log({
+    actorType: 'user',
+    actor,
+    action: 'demo.purged',
+    message: `Removed ${leads} demo lead(s), ${messageIds.length} message(s) and ${approvals} approval(s)`,
+  });
+
+  return { leads, messages: messageIds.length, approvals };
+}
+
 export function leadFilterOptions(): {
   cities: string[];
   categories: string[];
