@@ -245,6 +245,19 @@ export function isActive(key: IntegrationKey): boolean {
   return isConfigured(key) && (enabled || envEnabled);
 }
 
+/**
+ * Active *and* working: the last recorded check did not fail.
+ *
+ * A connected key is not the same as a usable one — an expired card or an
+ * empty credit balance leaves the connector switched on while every call
+ * fails. The dashboard must show what the platform can actually do, so the
+ * status banner asks this rather than `isActive`.
+ */
+export function isHealthy(key: IntegrationKey): boolean {
+  if (!isActive(key)) return false;
+  return !readRow(key)?.last_error;
+}
+
 export function listIntegrations(): IntegrationView[] {
   ensureIntegrationRows();
   return INTEGRATION_CATALOG.map((entry) => {

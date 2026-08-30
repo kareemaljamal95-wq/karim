@@ -2,6 +2,7 @@ import { db } from '../db';
 import { serviceByKey } from '../domain/services';
 import { getSettings } from './settings';
 import { llmAvailable } from '../llm/provider';
+import { isHealthy } from './integrations';
 import { googlePlacesAvailable } from '../tools/googlePlaces';
 import { openStreetMapAvailable } from '../tools/openStreetMap';
 
@@ -245,7 +246,8 @@ export function systemStatus(): SystemStatus {
     // no real source is connected, not which one it is.
     demoMode: !liveDiscovery,
     liveDiscovery,
-    liveReasoning: llmAvailable(),
+    // Configured is not enough — a key with no credit fails every call.
+    liveReasoning: llmAvailable() && isHealthy('anthropic'),
     outboundSendingEnabled: settings.outboundSendingEnabled,
     pendingApprovals: metrics.pendingApprovals,
     demoLeads: metrics.demoLeads,
