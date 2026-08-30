@@ -23,7 +23,19 @@ import { recordIntegrationCheck, isActive } from '../services/integrations';
 import { categoryFamily, type CategoryFamily, type DiscoveredBusiness } from '../domain/business';
 
 const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
-const OVERPASS = 'https://overpass-api.de/api/interpreter';
+
+/**
+ * Overpass endpoints, tried in order.
+ *
+ * The public instances are free and heavily shared, so a busy one answers 429
+ * or 504 rather than failing outright. Mirrors run the same API over the same
+ * data, so moving to the next one is a retry, not a change of source.
+ */
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
+];
 
 /** Both services ask for a descriptive agent string identifying the client. */
 const USER_AGENT = 'ai-ceo-platform/1.0 (agentic business discovery; contact via deployment operator)';
@@ -323,6 +335,46 @@ export function overpassQuery(selectors: string[], box: BoundingBox, limit: numb
 }
 
 /**
+ * Runs a query against the Overpass endpoints in turn.
+ *
+ * A busy public instance replies 429 or 504; that is worth trying the next
+ * mirror for. A 400 means the query itself is wrong, so it fails immediately
+ * rather than repeating a bad request across every endpoint.
+ */
+async function queryOverpass(data: string): Promise<{ elements?: OsmElement[] }> {
+  let lastDetail = 'no Overpass endpoint responded';
+
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    let response: Response;
+    try {
+      response = await fetchWithTimeout(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': USER_AGENT,
+        },
+        body: new URLSearchParams({ data }).toString(),
+      });
+    } catch (error) {
+      lastDetail = error instanceof Error && error.name === 'AbortError' ? 'the request timed out' : 'network error';
+      continue;
+    }
+
+    if (response.ok) return (await response.json().catch(() => ({}))) as { elements?: OsmElement[] };
+
+    if (response.status === 400) {
+      throw new Error('OpenStreetMap rejected the search query');
+    }
+    lastDetail =
+      response.status === 429 || response.status === 504
+        ? 'every public Overpass instance is rate-limiting or busy — try again in a minute'
+        : `HTTP ${response.status}`;
+  }
+
+  throw new Error(`OpenStreetMap search failed: ${lastDetail}`);
+}
+
+/**
  * Live business discovery through OpenStreetMap.
  *
  * Only fields the map data actually contains are mapped; everything else stays
@@ -338,25 +390,7 @@ export async function searchOpenStreetMap(
 
   try {
     const { box, areaNotice } = await geocode(params);
-    const response = await fetchWithTimeout(OVERPASS, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': USER_AGENT,
-      },
-      body: new URLSearchParams({ data: overpassQuery(selectors, box, limit) }).toString(),
-    });
-
-    if (!response.ok) {
-      // 429 and 504 are Overpass telling us the free service is busy.
-      const detail =
-        response.status === 429 || response.status === 504
-          ? 'the public Overpass service is rate-limiting or busy — try again shortly'
-          : `HTTP ${response.status}`;
-      throw new Error(`OpenStreetMap search failed: ${detail}`);
-    }
-
-    const payload = (await response.json().catch(() => ({}))) as { elements?: OsmElement[] };
+    const payload = await queryOverpass(overpassQuery(selectors, box, limit));
     const businesses = (payload.elements ?? [])
       .map((element) => mapOsmElement(element, params))
       .filter((business): business is DiscoveredBusiness => business !== null)

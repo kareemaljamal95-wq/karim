@@ -9,7 +9,7 @@ import { slug } from '../domain/business';
  */
 
 export const DEMO_NOTICE =
-  'Demo data: these businesses are fictional samples generated for evaluation. Connect Google Places to discover real businesses.';
+  'Demo data: these businesses are fictional samples generated for evaluation. Connect Google Places, or the keyless OpenStreetMap connector, to discover real businesses.';
 
 /** Small deterministic PRNG so the same search always returns the same sample. */
 function makeRng(seed: string): () => number {
