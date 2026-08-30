@@ -367,6 +367,56 @@ export async function sendMessage(id: string, actor: string): Promise<SendOutcom
   return { message: getMessage(id), dispatched: true, reason: delivery.detail };
 }
 
+/**
+ * Records that a human sent this message themselves, outside the platform.
+ *
+ * The platform can draft, score and hold a message without being able to
+ * deliver it — a blocked SMTP port or a lead with only a phone number are both
+ * ordinary. Refusing to track what the operator then did by hand would leave
+ * the pipeline lying about its own state: the lead never advances, the follow-up
+ * never surfaces, and the reply has nothing to attach to.
+ *
+ * It is recorded as a manual dispatch, never as one the platform performed.
+ */
+export function markSentManually(id: string, actor: string, note?: string): Message {
+  const message = getMessage(id);
+  if (message.status === 'SENT') throw conflict('This message is already marked as sent');
+  if (message.status !== 'APPROVED') throw conflict('Only an approved message can be marked as sent');
+
+  const now = nowIso();
+  db()
+    .prepare(`UPDATE messages SET status = 'SENT', sent_at = @ts, updated_at = @ts WHERE id = @id`)
+    .run({ id, ts: now });
+
+  updateLead(message.leadId, { status: 'CONTACTED', lastContactAt: now }, actor);
+
+  db()
+    .prepare(
+      `INSERT INTO conversations (id, lead_id, message_id, direction, channel, body, created_at)
+       VALUES (@id, @lead_id, @message_id, 'outbound', @channel, @body, @created_at)`,
+    )
+    .run({
+      id: newId(),
+      lead_id: message.leadId,
+      message_id: message.id,
+      channel: message.channel,
+      body: message.body,
+      created_at: now,
+    });
+
+  log({
+    level: 'warn',
+    actorType: 'user',
+    actor,
+    action: 'message.sent_manually',
+    entityType: 'message',
+    entityId: id,
+    message: `${actor} sent the ${message.channel} message to ${message.leadName} by hand, outside the platform.${note ? ` Note: ${note}` : ''}`,
+  });
+
+  return getMessage(id);
+}
+
 export function messageStats(): { total: number; pending: number; approved: number; sent: number } {
   const row = db()
     .prepare(

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, Check, MessageSquare, Pencil, Send, ShieldCheck, X } from 'lucide-react';
+import { AlertTriangle, Check, ClipboardCheck, MessageSquare, Pencil, Send, ShieldCheck, X } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAction, useAuth, useQuery, useSystemStatus } from '../lib/hooks';
 import { relativeTime } from '../lib/format';
@@ -63,6 +63,29 @@ export function MessagesPage() {
         refresh();
       },
     });
+
+  /**
+   * Copies the message so it can be sent from the operator's own mailbox, then
+   * records that they did. Delivery can be blocked for ordinary reasons — no
+   * provider connected, a lead reachable only by phone — and the pipeline still
+   * needs to know the business was contacted.
+   */
+  const markSentManually = async (message: Message) => {
+    const text = [message.subject, message.body].filter(Boolean).join('\n\n');
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // Clipboard access can be denied; the body is on screen to copy by hand.
+    }
+    if (!window.confirm('Copied. Mark this as sent once you have actually sent it yourself?')) return;
+    void run(() => api(`/messages/${message.id}/mark-sent`, { method: 'POST', body: {} }), {
+      success: 'Recorded as sent by hand — the lead is now marked contacted',
+      onSuccess: () => {
+        refetch();
+        refresh();
+      },
+    });
+  };
 
   const send = (message: Message) =>
     run<{ dispatched: boolean; reason: string }>(
@@ -195,6 +218,18 @@ export function MessagesPage() {
                         Reject
                       </button>
                     </>
+                  )}
+                  {message.status === 'APPROVED' && (
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => void markSentManually(message)}
+                      disabled={pending}
+                      title="Copy the message, send it from your own mailbox, and record it here"
+                    >
+                      <ClipboardCheck className="h-4 w-4" />
+                      I sent this myself
+                    </button>
                   )}
                   {message.status === 'APPROVED' && (
                     <button

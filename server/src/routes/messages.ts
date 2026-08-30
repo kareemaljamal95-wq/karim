@@ -8,6 +8,7 @@ import {
   markApproved,
   markRejected,
   messageStats,
+  markSentManually,
   sendMessage,
 } from '../services/messages';
 import { findPendingApprovalFor, recordDecision } from '../services/approvals';
@@ -92,6 +93,20 @@ messagesRouter.post(
  * Dispatch endpoint. Guarded three ways: the message must be approved, outbound
  * sending must be enabled, and the channel integration must be connected.
  */
+/**
+ * Marks an approved message as sent by hand. Used when delivery happens
+ * outside the platform — a channel with no provider wired, or a lead reachable
+ * only by phone.
+ */
+messagesRouter.post(
+  '/:id/mark-sent',
+  requireOperator,
+  asyncHandler(async (req, res) => {
+    const { note } = z.object({ note: z.string().max(500).optional() }).parse(req.body ?? {});
+    res.json({ message: markSentManually(req.params.id, actorOf(req), note) });
+  }),
+);
+
 messagesRouter.post(
   '/:id/send',
   requireOperator,

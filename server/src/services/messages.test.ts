@@ -143,6 +143,26 @@ describe('the dispatch gate', () => {
     assert.equal(messages.getMessage(draft.id).status, 'APPROVED');
   });
 
+  test('records a message the operator sent by hand', async () => {
+    const draft = draftFor(leadId);
+    await assert.rejects(
+      async () => messages.markSentManually(draft.id, 'karim'),
+      /approved message/i,
+      'an unapproved draft cannot be marked sent either',
+    );
+
+    messages.markApproved(draft.id, 'karim');
+    const sent = messages.markSentManually(draft.id, 'karim', 'sent from my own mailbox');
+
+    assert.equal(sent.status, 'SENT');
+    assert.ok(sent.sentAt);
+    // The lead moves forward, so follow-ups and replies have something to attach to.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getLead } = require('./leads') as typeof import('./leads');
+    assert.equal(getLead(leadId).status, 'CONTACTED');
+    assert.throws(() => messages.markSentManually(draft.id, 'karim'), /already marked as sent/i);
+  });
+
   test('stops once the daily cap is reached', async () => {
     updateSettings({ dailyOutreachCap: 1 });
     // Fill the cap with a message already delivered today. Written straight to
