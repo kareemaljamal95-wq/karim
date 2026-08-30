@@ -78,3 +78,58 @@ describe('findSpamPhrases', () => {
     assert.deepEqual(findSpamPhrases('Hello Cedar Cafe team, I noticed one thing about your setup.'), []);
   });
 });
+
+/**
+ * Most of the pipeline is Riyadh and Dubai. English-only guards passed an
+ * Arabic message that guaranteed a 50% sales increase and quoted a price, and
+ * scored it 100/100 in the approval queue — the reviewer was being told the
+ * message was clean while it broke three rules at once.
+ */
+describe('the guards read Arabic', () => {
+  const pitch =
+    'مرحباً، نضمن لك زيادة 50% في المبيعات خلال شهر. السعر 5000 ريال فقط. عرض لفترة محدودة، اشترِ الآن!';
+
+  it('catches the guarantee, the price, the outcome claim and the spam', () => {
+    const claims = findForbiddenClaims(pitch).map((c) => c.phrase);
+    assert.ok(
+      claims.some((c) => c.includes('نضمن')),
+      'a guarantee is a commercial commitment in any language',
+    );
+    assert.ok(claims.some((c) => c.includes('ريال')), 'a quoted price must be caught');
+    assert.ok(claims.some((c) => c.includes('%')), 'a quantified outcome claim must be caught');
+    assert.ok(findSpamPhrases(pitch).length >= 2);
+  });
+
+  it('is not fooled by a different hamza, vowel marks or a stretched word', () => {
+    // The same word, four ways it is really written.
+    for (const text of ['أضمن لك النتائج', 'اضمن لك النتائج', 'نَضْمَن لك النتائج', 'نضـــمن لك النتائج']) {
+      assert.ok(findForbiddenClaims(text).length > 0, `missed: ${text}`);
+    }
+  });
+
+  it('reads Arabic-Indic digits as numbers', () => {
+    assert.ok(findForbiddenClaims('التكلفة: ٥٠٠٠ ريال').length > 0);
+    assert.ok(findForbiddenClaims('زيادة ٤٠٪ في الحجوزات').length > 0);
+  });
+
+  it('catches an AI claiming it visited the shop', () => {
+    assert.ok(findImpersonation('زرت مقهاك الأسبوع الماضي وأعجبني المكان').length > 0);
+    assert.ok(findImpersonation('أسكن قريباً منكم').length > 0);
+  });
+
+  it('leaves an honest Arabic message alone', () => {
+    // Specific, evidence-based, no promise and no price — this must pass, or
+    // the guards would block the only kind of message worth sending.
+    const honest =
+      'مرحباً فريق مقهى الأصيل، أنا مساعد ذكاء اصطناعي أعمل مع كريم. لاحظنا أن موقعكم لا يوفر طلباً أونلاين. هل عشر دقائق مكالمة مناسبة؟';
+    assert.deepEqual(findForbiddenClaims(honest), []);
+    assert.deepEqual(findSpamPhrases(honest), []);
+    assert.deepEqual(findImpersonation(honest), []);
+  });
+
+  it('still catches everything it caught in English', () => {
+    assert.ok(findForbiddenClaims('We guarantee 50% more revenue for $500').length >= 2);
+    assert.ok(findSpamPhrases('Dear Sir/Madam, act now!').length > 0);
+    assert.ok(findImpersonation('I walked past your shop yesterday').length > 0);
+  });
+});

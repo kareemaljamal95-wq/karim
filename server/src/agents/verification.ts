@@ -51,6 +51,32 @@ export const failedChecks = (report: ValidationReport): VerificationCheck[] =>
   report.checks.filter((c) => c.blocking && !c.passed);
 
 /** Phrases that mark generic outreach spam. Used by the message quality check. */
+/**
+ * Folds the spelling variants of a phrase onto one form before it is matched.
+ *
+ * Arabic is written with several interchangeable spellings of the same word:
+ * `أضمن`, `اضمن` and `آضمن` differ only in the hamza, optional vowel marks sit
+ * on top of any letter, and `ـ` can be inserted anywhere to stretch a word.
+ * Matching the raw string means the guards catch one spelling and miss the
+ * others — which is not a guard at all, since the miss is what gets sent.
+ *
+ * Also maps Arabic-Indic digits and `٪`, so a price or a percentage claim is
+ * caught in either numeral system.
+ */
+export function normalize(text: string): string {
+  return text
+    .replace(/[ً-ْٰـ]/g, '') // vowel marks, dagger alef, tatweel
+    .replace(/[آأإٱ]/g, 'ا') // آ إ أ ٱ -> ا
+    .replace(/ى/g, 'ي') // ى -> ي
+    .replace(/ة/g, 'ه') // ة -> ه
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660)) // ٠-٩ -> 0-9
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)) // ۰-۹ -> 0-9
+    .replace(/٪/g, '%')
+    .replace(/٫/g, '.')
+    .replace(/٬/g, ',')
+    .toLowerCase();
+}
+
 export const SPAM_PHRASES = [
   'dear sir/madam',
   'dear sir or madam',
@@ -66,6 +92,24 @@ export const SPAM_PHRASES = [
   'click here now',
   'this is not spam',
   'congratulations, you have been selected',
+  // Arabic, written in the normalised form the matcher sees. Most of the
+  // pipeline is Riyadh and Dubai, so an English-only list guards the smaller
+  // half of the outreach.
+  'الي من يهمه الامر', // to whom it may concern
+  'عرض لفتره محدوده', // limited time offer
+  'لفتره محدوده فقط', // for a limited time only
+  'اشتر الان', // buy now
+  'اضغط هنا', // click here
+  'سارع الان', // act now
+  'فرصه لا تعوض', // an opportunity not to be missed
+  'نتايج مضمونه', // guaranteed results (with ئ folded)
+  'نتائج مضمونه',
+  'مضمون 100%',
+  '100% مضمون',
+  'نحن الافضل', // we are the best
+  'افضل سعر في السوق', // best price on the market
+  'هذه ليست رساله مزعجه', // this is not spam
+  'تهانينا لقد تم اختيارك', // congratulations, you have been selected
 ];
 
 /**
@@ -94,6 +138,38 @@ export const FORBIDDEN_CLAIM_PATTERNS: { pattern: RegExp; reason: string }[] = [
   { pattern: /\bfree of charge forever\b/i, reason: 'Open-ended commercial commitment.' },
   { pattern: /\brefunds?\b/i, reason: 'Refund terms are a commercial commitment.' },
   { pattern: /\bmoney[- ]back\b/i, reason: 'Money-back terms are a commercial commitment.' },
+
+  // Arabic. Written against the normalised text, so no hamza or vowel-mark
+  // variants are needed here. `\b` is not used: it is meaningless beside Arabic
+  // script, where it would match at every letter boundary.
+  {
+    pattern: /(نضمن|اضمن|نضمن لك|ضمان|مضمون|نتعهد)/,
+    reason: 'Guarantees are a commercial commitment and need a human.',
+  },
+  {
+    pattern: /(?:ر\.?س|د\.?[إا]|ج\.?م)\s?\d|\d[\d,.]*\s?(?:ريال|ريالا|درهم|درهما|دولار|دولارا|يورو|جنيه|جنيها|الف|مليون)/,
+    reason: 'Concrete prices must not be quoted without approval.',
+  },
+  {
+    pattern: /(?:السعر|التكلفه|التكاليف|الرسوم|الميزانيه)\s*[:هي]*\s*\d/,
+    reason: 'Concrete prices must not be quoted without approval.',
+  },
+  {
+    pattern: /\d+\s?%\s?(زياده|نمو|ارباح|مبيعات|عايد|عائد|حجوزات)|(زياده|نمو|ارباح|مبيعات|حجوزات)\s?(?:ب|تصل الي)?\s?\d+\s?%/,
+    reason: 'Quantified outcome claims are unverifiable.',
+  },
+  {
+    pattern: /(ضاعف|نضاعف|مضاعفه)\s?(ارباحك|مبيعاتك|دخلك|عملاءك)/,
+    reason: 'Outcome promises are unverifiable.',
+  },
+  {
+    pattern: /(استرداد|استرجاع)\s?(المبلغ|النقود|الاموال|كامل)/,
+    reason: 'Refund terms are a commercial commitment.',
+  },
+  {
+    pattern: /مجان(?:ي|ا|ية)?\s?(?:للابد|مدي الحياه|الي الابد)/,
+    reason: 'Open-ended commercial commitment.',
+  },
 ];
 
 /** Language implying the sender is a human being. */
@@ -103,24 +179,38 @@ export const HUMAN_IMPERSONATION_PATTERNS: RegExp[] = [
   /\bi live (nearby|near you|in the area)\b/i,
   /\bmy (wife|husband|family|kids|colleague) (and i |)(visited|went|ate)\b/i,
   /\bwhen i was (there|in your shop|at your)\b/i,
+
+  // Arabic, against the normalised text.
+  /(زرت|زرنا)\s?(محلك|متجرك|مقهاك|مطعمك|فرعك)/,
+  /مررت\s?(بمحلك|بمتجرك|امام)/,
+  /انا\s?(انسان|بشر|شخص حقيقي)/,
+  /(اسكن|اعيش)\s?(قريبا|بالقرب منك|في المنطقه|في نفس الحي)/,
+  /(تناولت|شربت)\s?(الغداء|العشاء|القهوه|الفطور)\s?(عندكم|لديكم|في محلكم)/,
 ];
 
+/**
+ * Every guard reads the normalised text, so a phrase spelled with a different
+ * hamza, a vowel mark or Arabic-Indic digits is caught like the plain form.
+ * The normalised phrase is what gets reported — it is what matched.
+ */
 export function findSpamPhrases(text: string): string[] {
-  const lower = text.toLowerCase();
-  return SPAM_PHRASES.filter((phrase) => lower.includes(phrase));
+  const haystack = normalize(text);
+  return SPAM_PHRASES.filter((phrase) => haystack.includes(phrase));
 }
 
 export function findForbiddenClaims(text: string): { phrase: string; reason: string }[] {
+  const haystack = normalize(text);
   const found: { phrase: string; reason: string }[] = [];
   for (const { pattern, reason } of FORBIDDEN_CLAIM_PATTERNS) {
-    const match = text.match(pattern);
+    const match = haystack.match(pattern);
     if (match) found.push({ phrase: match[0], reason });
   }
   return found;
 }
 
 export function findImpersonation(text: string): string[] {
-  return HUMAN_IMPERSONATION_PATTERNS.map((p) => text.match(p)?.[0]).filter(
+  const haystack = normalize(text);
+  return HUMAN_IMPERSONATION_PATTERNS.map((p) => haystack.match(p)?.[0]).filter(
     (m): m is string => Boolean(m),
   );
 }
