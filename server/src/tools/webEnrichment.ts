@@ -137,7 +137,7 @@ async function fetchPage(target: URL): Promise<FetchedPage | { error: string }> 
       continue;
     }
 
-    if (!response.ok) return { error: `HTTP ${response.status}`, ...{} };
+    if (!response.ok) return { error: `HTTP ${response.status}` };
 
     const type = response.headers.get('content-type') ?? '';
     if (!type.includes('html')) return { url: url.toString(), status: response.status, html: '' };

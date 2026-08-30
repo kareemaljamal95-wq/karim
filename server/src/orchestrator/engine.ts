@@ -118,8 +118,6 @@ export async function runDiscoveryWorkflow(input: DiscoveryRunInput): Promise<Di
   let messagesDrafted = 0;
   let approvalsCreated = 0;
 
-  const nodeById = new Map(workflow.definition.nodes.map((n) => [n.id, n]));
-
   try {
     for (const node of nodes) {
       seq += 1;

@@ -1,9 +1,5 @@
 import { db } from '../db';
-import {
-  getApproval,
-  recordDecision,
-  type Approval,
-} from './approvals';
+import { recordDecision, type Approval } from './approvals';
 import { listMessages, markApproved, markRejected, sendMessage } from './messages';
 import { getLead, setLeadStatus, updateLead } from './leads';
 import { updateProject } from './projects';
