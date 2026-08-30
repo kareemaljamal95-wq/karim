@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { KeyRound, Lock, Plug, ShieldCheck } from 'lucide-react';
+import { KeyRound, Lock, Plug, ShieldCheck, Wifi } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAction, useAuth, useQuery, useSystemStatus } from '../lib/hooks';
 import { relativeTime, titleCase } from '../lib/format';
@@ -148,14 +148,26 @@ function ConnectModal({
   const [values, setValues] = useState<Record<string, string>>({});
   const [enabled, setEnabled] = useState(false);
   const [loaded, setLoaded] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{ ok: boolean; detail: string } | null>(null);
 
   if (integration && loaded !== integration.key) {
     setLoaded(integration.key);
     setValues({});
     setEnabled(integration.enabled);
+    setTestResult(null);
   }
 
   if (!integration) return <Modal open={false} onClose={onClose} title="" children={null} />;
+
+  /** Authenticates against the provider without sending anything. */
+  const testConnection = async () => {
+    if (!integration) return;
+    const result = await run<{ ok: boolean; detail: string }>(
+      () => api(`/system/integrations/${integration.key}/test`, { method: 'POST', body: {} }),
+      {},
+    );
+    if (result) setTestResult(result);
+  };
 
   const save = async () => {
     const credentials = Object.fromEntries(
@@ -180,6 +192,12 @@ function ConnectModal({
       description={integration.description}
       footer={
         <>
+          {integration.key === 'gmail' && (
+            <button type="button" className="btn-secondary" onClick={testConnection} disabled={pending}>
+              {pending ? <Spinner /> : <Wifi className="h-4 w-4" />}
+              Test connection
+            </button>
+          )}
           <button type="button" className="btn-secondary" onClick={onClose}>
             Cancel
           </button>
@@ -229,6 +247,20 @@ function ConnectModal({
             description="Agents will only use it once it is both configured and enabled."
           />
         </div>
+
+        {testResult && (
+          <InfoNote tone={testResult.ok ? undefined : 'warning'}>
+            {testResult.ok ? '✅ ' : '⚠️ '}
+            {testResult.detail}
+          </InfoNote>
+        )}
+
+        {integration.key === 'gmail' ? (
+          <InfoNote>
+            Save the address and App Password first, then use <strong>Test connection</strong> — it
+            authenticates with Gmail and disconnects without emailing anyone.
+          </InfoNote>
+        ) : null}
 
         {integration.key === 'gmail' || integration.key === 'whatsapp_business' ? (
           <InfoNote tone="warning">

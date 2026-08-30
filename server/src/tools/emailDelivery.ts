@@ -84,6 +84,56 @@ export function resetEmailTransport(): void {
 }
 
 /**
+ * Checks the stored credentials against Gmail without sending anything.
+ *
+ * SMTP authenticates before any message is offered, so this proves the address
+ * and App Password are accepted while nobody receives mail. It is the safe way
+ * to answer "did I set this up correctly?" — the alternative is emailing a real
+ * business to find out.
+ */
+export async function verifyEmailConnection(): Promise<DeliveryResult> {
+  const credentials = getCredentials('gmail');
+  const account = credentials.user?.trim();
+  const appPassword = credentials.appPassword?.replace(/\s+/g, '');
+
+  if (!account || !appPassword) {
+    return {
+      delivered: false,
+      detail: 'No sending address or App Password is saved yet.',
+    };
+  }
+  if (appPassword.length !== 16) {
+    return {
+      delivered: false,
+      detail: `A Google App Password is exactly 16 characters; this one is ${appPassword.length}. An ordinary account password will not work.`,
+    };
+  }
+
+  try {
+    await transportFor(account, appPassword).verify();
+    recordIntegrationCheck('gmail', null);
+    return { delivered: true, detail: `Gmail accepted the credentials for ${account}. No email was sent.` };
+  } catch (error) {
+    const detail = explainSmtpError(error);
+    recordIntegrationCheck('gmail', detail);
+    resetEmailTransport();
+    return { delivered: false, detail };
+  }
+}
+
+/** Google's SMTP rejections are opaque; name the actual fix instead. */
+function explainSmtpError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  if (/invalid login|username and password not accepted|535/i.test(raw)) {
+    return 'Gmail rejected the credentials. The sending address must match the account the App Password was created in, 2-step verification must be on, and the password must be the 16-character App Password rather than the account password.';
+  }
+  if (/ETIMEDOUT|ECONNREFUSED|ENOTFOUND|ECONNRESET/i.test(raw)) {
+    return `Could not reach ${SMTP_HOST}: ${raw}`;
+  }
+  return raw;
+}
+
+/**
  * Delivers one email. Never throws: the caller decides what a failure means for
  * the message's status, and a delivery that did not happen must never be
  * recorded as one that did.
@@ -108,12 +158,7 @@ export async function deliverEmail(payload: EmailPayload): Promise<DeliveryResul
     recordIntegrationCheck('gmail', null);
     return { delivered: true, detail: `Accepted by ${SMTP_HOST} (id ${info.messageId}).` };
   } catch (error) {
-    const raw = error instanceof Error ? error.message : String(error);
-    // Google's SMTP rejection for a wrong or missing App Password is verbose
-    // and unhelpful; name the actual fix instead.
-    const detail = /invalid login|username and password not accepted|535/i.test(raw)
-      ? 'Gmail rejected the credentials. The sending address must match the account, and the password must be a 16-character App Password with 2-step verification enabled.'
-      : raw;
+    const detail = explainSmtpError(error);
     recordIntegrationCheck('gmail', detail);
     resetEmailTransport();
     return { delivered: false, detail };

@@ -15,6 +15,7 @@ import { listLeads } from '../services/leads';
 import { listMessages } from '../services/messages';
 import { listRuns } from '../services/runs';
 import { SERVICE_CATALOG } from '../domain/services';
+import { verifyEmailConnection } from '../tools/emailDelivery';
 import { LEAD_STATUSES } from '../types';
 import { actorOf, asyncHandler, parseIntOr } from '../util/http';
 import { badRequest } from '../util/errors';
@@ -140,6 +141,24 @@ const integrationSchema = z.object({
   config: z.record(z.unknown()).optional(),
   enabled: z.boolean().optional(),
 });
+
+/**
+ * Checks a connector's stored credentials against the provider.
+ *
+ * Read-only by design: it authenticates and disconnects, so an operator can
+ * confirm the setup without emailing a real business to find out.
+ */
+systemRouter.post(
+  '/integrations/:key/test',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    if (req.params.key !== 'gmail') {
+      throw badRequest('Only the email connector supports a connection test today.');
+    }
+    const result = await verifyEmailConnection();
+    res.json({ ok: result.delivered, detail: result.detail });
+  }),
+);
 
 systemRouter.patch(
   '/integrations/:key',
