@@ -39,9 +39,35 @@ describe('detectSignals', () => {
     assert.ok(hasSignal(signals, 'no_booking_system'));
   });
 
-  it('flags a missing website from the listing alone', () => {
-    const signals = detectSignals(business({ website: null }));
-    assert.ok(hasSignal(signals, 'no_website'));
+  it('flags a missing website only when the source can prove it is missing', () => {
+    // Google Places lists every website it knows, so its adapter asserts 'none'.
+    const proven = detectSignals(business({ website: null, observations: { websiteStatus: 'none' } }));
+    assert.ok(hasSignal(proven, 'no_website'));
+
+    // A blank field on its own is an absence of information. OpenStreetMap is
+    // volunteer-maintained: an untagged website is unrecorded, not non-existent.
+    const unproven = detectSignals(business({ website: null, source: 'openstreetmap', isDemo: false }));
+    assert.equal(hasSignal(unproven, 'no_website'), false);
+  });
+
+  it('claims a missing email or social profile only where the source would have carried it', () => {
+    const sparse = { email: null, phone: null, socialLinks: {} } as const;
+
+    // Demo fixtures are complete by construction, so their blanks are meaningful.
+    const demo = detectSignals(business({ ...sparse }));
+    assert.ok(hasSignal(demo, 'weak_customer_communication'));
+    assert.ok(hasSignal(demo, 'poor_social_presence'));
+
+    // Places never exposes an email address or a social profile for anyone, so
+    // their absence says nothing about this business in particular.
+    const places = detectSignals(business({ ...sparse, source: 'google_places', isDemo: false }));
+    assert.equal(hasSignal(places, 'weak_customer_communication'), false);
+    assert.equal(hasSignal(places, 'no_public_email'), false);
+    assert.equal(hasSignal(places, 'poor_social_presence'), false);
+
+    const osm = detectSignals(business({ ...sparse, source: 'openstreetmap', isDemo: false }));
+    assert.equal(hasSignal(osm, 'no_public_email'), false);
+    assert.equal(hasSignal(osm, 'poor_social_presence'), false);
   });
 
   it('does not raise ordering gaps for categories where ordering is irrelevant', () => {

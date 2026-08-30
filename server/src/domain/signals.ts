@@ -2,6 +2,7 @@ import {
   BOOKING_FAMILIES,
   HIGH_INQUIRY_FAMILIES,
   ORDERING_FAMILIES,
+  SOURCE_PROVES_ABSENCE,
   categoryFamily,
   isPlausibleEmail,
   type DiscoveredBusiness,
@@ -63,7 +64,9 @@ export function detectSignals(business: DiscoveredBusiness): Signal[] {
   const socialCount = Object.values(business.socialLinks ?? {}).filter(Boolean).length;
 
   // --- Web presence -------------------------------------------------------
-  if (!business.website || obs.websiteStatus === 'none') {
+  // Only an adapter that can prove absence sets `websiteStatus: 'none'`. A
+  // blank website field on its own proves nothing — see SOURCE_PROVES_ABSENCE.
+  if (obs.websiteStatus === 'none') {
     signals.push(
       signal('no_website', 'No website is listed on the public business profile.', 0.95),
     );
@@ -115,7 +118,8 @@ export function detectSignals(business: DiscoveredBusiness): Signal[] {
   }
 
   // --- Communication and automation --------------------------------------
-  if (!business.phone && !isPlausibleEmail(business.email)) {
+  const proves = SOURCE_PROVES_ABSENCE[business.source];
+  if (proves.phone && proves.email && !business.phone && !isPlausibleEmail(business.email)) {
     signals.push(
       signal(
         'weak_customer_communication',
@@ -123,7 +127,7 @@ export function detectSignals(business: DiscoveredBusiness): Signal[] {
         0.9,
       ),
     );
-  } else if (!isPlausibleEmail(business.email)) {
+  } else if (proves.email && !isPlausibleEmail(business.email)) {
     signals.push(signal('no_public_email', 'No public email address is published.', 0.85));
   }
 
@@ -137,7 +141,7 @@ export function detectSignals(business: DiscoveredBusiness): Signal[] {
     );
   }
 
-  if (socialCount === 0) {
+  if (proves.social && socialCount === 0) {
     signals.push(signal('poor_social_presence', 'No social media profiles are linked publicly.', 0.8));
   }
 

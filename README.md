@@ -218,5 +218,8 @@ Messages still require per-message human approval. The dispatch call sites are i
 - SQLite is used for portability; the data layer is small and isolated if you move to Postgres.
 - Channel delivery is gated and stubbed — approval, queueing, status and audit are real; the network
   call to a provider is the piece to implement when you connect one.
-- Website quality signals come from the discovery source. Live Places data proves only whether a site
-  is listed, so live leads produce fewer signals than demo records — by design, rather than guessing.
+- Signals depend on what the source can prove, encoded in `SOURCE_PROVES_ABSENCE`
+  (`server/src/domain/business.ts`). Places lists every website and phone it knows, so a blank there
+  is evidence; it never exposes emails or social profiles, so a blank there is not. OpenStreetMap is
+  volunteer-maintained, so no blank is evidence. Live leads therefore produce fewer signals than demo
+  records — by design, rather than guessing — and the missing dimensions lower confidence instead.

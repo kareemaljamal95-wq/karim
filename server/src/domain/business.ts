@@ -1,3 +1,30 @@
+export type DiscoverySourceName = 'google_places' | 'openstreetmap' | 'demo' | 'manual' | 'import';
+
+/**
+ * What each source's *silence* is allowed to prove.
+ *
+ * The platform may only reason from evidence, and absence is evidence in one
+ * case only: when the source would have carried the fact had it existed.
+ * Google Places lists every website and phone number it knows, so a blank
+ * there means something — but it never exposes email addresses or social
+ * profiles, so a blank there means nothing at all. OpenStreetMap is
+ * volunteer-maintained, so any blank is simply unrecorded. Demo fixtures are
+ * internally complete by construction.
+ *
+ * A `false` here does not weaken a lead — it stops the analyst inventing a
+ * deficiency, and the missing dimension lowers confidence instead.
+ */
+export const SOURCE_PROVES_ABSENCE: Record<
+  DiscoverySourceName,
+  { phone: boolean; email: boolean; social: boolean }
+> = {
+  google_places: { phone: true, email: false, social: false },
+  openstreetmap: { phone: false, email: false, social: false },
+  demo: { phone: true, email: true, social: true },
+  manual: { phone: false, email: false, social: false },
+  import: { phone: false, email: false, social: false },
+};
+
 /** A business as discovered by the Market Scout, before analysis. */
 export interface DiscoveredBusiness {
   name: string;
@@ -28,7 +55,7 @@ export interface DiscoveredBusiness {
     respondsToReviews?: boolean;
     priceLevel?: number;
   };
-  source: 'google_places' | 'openstreetmap' | 'demo' | 'manual' | 'import';
+  source: DiscoverySourceName;
   isDemo: boolean;
   externalId?: string | null;
 }
