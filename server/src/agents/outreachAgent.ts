@@ -15,6 +15,8 @@ export interface OutreachSubject {
   /** Evidence sentences the message may reference. */
   evidence: string[];
   benefit: string;
+  /** What the recommended service does, in the customer's terms. */
+  serviceSummary?: string | null;
   hasEmail: boolean;
   hasPhone: boolean;
 }
@@ -286,13 +288,19 @@ function buildTemplate(
 ): DraftedMessage {
   const service = context.recommendedServiceLabel ?? 'a small improvement to how customers reach you';
   const evidence = context.evidence[0] ?? context.problem;
+  // Name the service once, then say what it does — the internal scoring
+  // sentence ("supported by 1 observed signal") is for the operator's audit
+  // trail, never for the business owner reading the message.
+  const remedy = context.serviceSummary
+    ? `${withArticle(service)} would cover that — ${lowerFirst(context.serviceSummary)}`
+    : `${withArticle(service)} would cover that.`;
 
   const email = [
     `Hello ${context.businessName} team,`,
     '',
     `I'm an AI assistant working with ${settings.senderName} at ${settings.companyName}. While looking at ${context.category} businesses in ${context.city}, I noticed one thing about your setup: ${lowerFirst(evidence)}`,
     '',
-    `${context.benefit} That is usually solved with ${lowerFirst(service)}.`,
+    remedy,
     '',
     `If that is worth ten minutes, ${settings.senderName} would be glad to talk it through — no obligation. If it is not relevant, just reply "no thanks" and we will not follow up.`,
     '',
@@ -301,7 +309,7 @@ function buildTemplate(
 
   const whatsapp = [
     `Hello ${context.businessName} — I'm an AI assistant working with ${settings.companyName}.`,
-    `I noticed ${lowerFirst(evidence)} ${context.benefit}`,
+    `I noticed ${lowerFirst(evidence)} ${remedy}`,
     `Would a short call with ${settings.senderName} be useful? Reply "no thanks" and we'll stop here.`,
   ].join(' ');
 
@@ -313,3 +321,9 @@ function buildTemplate(
 
 const lowerFirst = (value: string): string =>
   value.length ? value.charAt(0).toLowerCase() + value.slice(1) : value;
+
+/** "Ordering system" -> "An ordering system", so the sentence reads naturally. */
+const withArticle = (label: string): string => {
+  const lower = lowerFirst(label);
+  return `${/^[aeiou]/i.test(lower) ? 'An' : 'A'} ${lower}`;
+};

@@ -484,6 +484,11 @@ export async function runDiscoveryWorkflow(input: DiscoveryRunInput): Promise<Di
                 problem: item.opportunity.problem,
                 evidence: item.opportunity.signals.slice(0, 3).map((s) => s.evidence),
                 benefit: item.opportunity.possibleSolution,
+                serviceSummary:
+                  item.opportunity.candidateServices[0]?.service.summary ??
+                  (item.strategy?.recommendedService
+                    ? (serviceByKey(item.strategy.recommendedService)?.summary ?? null)
+                    : null),
                 hasEmail: Boolean(item.business.email),
                 hasPhone: Boolean(item.business.phone),
               },

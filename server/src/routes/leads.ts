@@ -193,6 +193,9 @@ leadsRouter.post(
         problem: lead.problem ?? 'No specific problem has been recorded for this lead yet.',
         evidence: lead.signals.slice(0, 3).map((s) => s.evidence),
         benefit: lead.reason ?? 'A short conversation about their current setup.',
+        serviceSummary: lead.recommendedService
+          ? (serviceByKey(lead.recommendedService)?.summary ?? null)
+          : null,
         hasEmail: Boolean(lead.email),
         hasPhone: Boolean(lead.phone),
       },
