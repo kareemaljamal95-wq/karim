@@ -15,8 +15,38 @@ import nodemailer, { type Transporter } from 'nodemailer';
 import { getCredentials, isActive, recordIntegrationCheck } from '../services/integrations';
 import type { PlatformSettings } from '../services/settings';
 
-const SMTP_HOST = 'smtp.gmail.com';
-const SMTP_PORT = 465;
+/** Defaults, used when the connector leaves the server fields blank. */
+const DEFAULT_SMTP_HOST = 'smtp.gmail.com';
+const DEFAULT_SMTP_PORT = 465;
+
+interface SmtpAccount {
+  user: string;
+  password: string;
+  host: string;
+  port: number;
+}
+
+/**
+ * Reads the SMTP account from the connector.
+ *
+ * The host and port are optional so the common case — Gmail — needs only an
+ * address and an App Password, while a mailbox on the operator's own domain
+ * works by filling in that provider's server.
+ */
+function smtpAccount(): SmtpAccount | null {
+  const credentials = getCredentials('gmail');
+  const user = credentials.user?.trim();
+  const password = credentials.appPassword?.replace(/\s+/g, '');
+  if (!user || !password) return null;
+
+  const port = Number(credentials.port?.trim() || DEFAULT_SMTP_PORT);
+  return {
+    user,
+    password,
+    host: credentials.host?.trim() || DEFAULT_SMTP_HOST,
+    port: Number.isFinite(port) && port > 0 ? port : DEFAULT_SMTP_PORT,
+  };
+}
 
 export const emailDeliveryAvailable = (): boolean => isActive('gmail');
 
@@ -63,16 +93,18 @@ export function buildEmail(
 let transporter: Transporter | null = null;
 let transporterAccount: string | null = null;
 
-function transportFor(account: string, appPassword: string): Transporter {
-  // Reuse the connection pool unless the credentials changed underneath us.
-  if (transporter && transporterAccount === account) return transporter;
+function transportFor(account: SmtpAccount): Transporter {
+  // Reuse the connection pool unless the account changed underneath us.
+  const identity = `${account.user}@${account.host}:${account.port}`;
+  if (transporter && transporterAccount === identity) return transporter;
   transporter = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: SMTP_PORT,
-    secure: true,
-    auth: { user: account, pass: appPassword },
+    host: account.host,
+    port: account.port,
+    // 465 is implicit TLS; 587 and 25 upgrade with STARTTLS.
+    secure: account.port === 465,
+    auth: { user: account.user, pass: account.password },
   });
-  transporterAccount = account;
+  transporterAccount = identity;
   return transporter;
 }
 
@@ -92,27 +124,26 @@ export function resetEmailTransport(): void {
  * business to find out.
  */
 export async function verifyEmailConnection(): Promise<DeliveryResult> {
-  const credentials = getCredentials('gmail');
-  const account = credentials.user?.trim();
-  const appPassword = credentials.appPassword?.replace(/\s+/g, '');
-
-  if (!account || !appPassword) {
-    return {
-      delivered: false,
-      detail: 'No sending address or App Password is saved yet.',
-    };
+  const account = smtpAccount();
+  if (!account) {
+    return { delivered: false, detail: 'No sending address or password is saved yet.' };
   }
-  if (appPassword.length !== 16) {
+  // Gmail is the one provider with a fixed password shape, so a wrong one can
+  // be named before the network call rather than after an opaque rejection.
+  if (account.host === DEFAULT_SMTP_HOST && account.password.length !== 16) {
     return {
       delivered: false,
-      detail: `A Google App Password is exactly 16 characters; this one is ${appPassword.length}. An ordinary account password will not work.`,
+      detail: `A Google App Password is exactly 16 characters; this one is ${account.password.length}. An ordinary account password will not work.`,
     };
   }
 
   try {
-    await transportFor(account, appPassword).verify();
+    await transportFor(account).verify();
     recordIntegrationCheck('gmail', null);
-    return { delivered: true, detail: `Gmail accepted the credentials for ${account}. No email was sent.` };
+    return {
+      delivered: true,
+      detail: `${account.host} accepted the credentials for ${account.user}. No email was sent.`,
+    };
   } catch (error) {
     const detail = explainSmtpError(error);
     recordIntegrationCheck('gmail', detail);
@@ -128,7 +159,7 @@ function explainSmtpError(error: unknown): string {
     return 'Gmail rejected the credentials. The sending address must match the account the App Password was created in, 2-step verification must be on, and the password must be the 16-character App Password rather than the account password.';
   }
   if (/ETIMEDOUT|ECONNREFUSED|ENOTFOUND|ECONNRESET/i.test(raw)) {
-    return `Could not reach ${SMTP_HOST}: ${raw}`;
+    return `Could not reach the mail server: ${raw}`;
   }
   return raw;
 }
@@ -139,24 +170,21 @@ function explainSmtpError(error: unknown): string {
  * recorded as one that did.
  */
 export async function deliverEmail(payload: EmailPayload): Promise<DeliveryResult> {
-  const credentials = getCredentials('gmail');
-  const account = credentials.user?.trim();
-  const appPassword = credentials.appPassword?.replace(/\s+/g, '');
-
-  if (!account || !appPassword) {
-    return { delivered: false, detail: 'The email connector has no sending address or App Password.' };
+  const account = smtpAccount();
+  if (!account) {
+    return { delivered: false, detail: 'The email connector has no sending address or password.' };
   }
 
   try {
-    const info = await transportFor(account, appPassword).sendMail({
-      from: { name: payload.fromName, address: account },
+    const info = await transportFor(account).sendMail({
+      from: { name: payload.fromName, address: account.user },
       to: payload.to,
       subject: payload.subject,
       text: payload.body,
       ...(payload.replyTo ? { replyTo: payload.replyTo } : {}),
     });
     recordIntegrationCheck('gmail', null);
-    return { delivered: true, detail: `Accepted by ${SMTP_HOST} (id ${info.messageId}).` };
+    return { delivered: true, detail: `Accepted by ${account.host} (id ${info.messageId}).` };
   } catch (error) {
     const detail = explainSmtpError(error);
     recordIntegrationCheck('gmail', detail);

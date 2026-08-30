@@ -70,15 +70,17 @@ export const INTEGRATION_CATALOG: IntegrationCatalogEntry[] = [
   },
   {
     key: 'gmail',
-    name: 'Gmail (SMTP)',
+    name: 'Email (SMTP)',
     category: 'communication',
     description:
-      'Email delivery over Gmail SMTP. Needs the sending address and a Google App Password — 2-step verification must be on, and an ordinary account password will not work. Connecting it does not start sending: a message still needs human approval, the environment switch and the Settings toggle.',
+      'Email delivery over SMTP. Works with Gmail — where the password must be a 16-character App Password with 2-step verification on — or with any provider that gives you a mailbox on your own domain. Leave the host and port blank for Gmail. Connecting it does not start sending: a message still needs human approval, the environment switch and the Settings toggle.',
     fields: [
-      { key: 'user', label: 'Sending address', secret: false, placeholder: 'you@gmail.com' },
-      { key: 'appPassword', label: 'Google App Password', secret: true, placeholder: '16 characters' },
+      { key: 'user', label: 'Sending address', secret: false, placeholder: 'you@yourdomain.com' },
+      { key: 'appPassword', label: 'Password or App Password', secret: true },
+      { key: 'host', label: 'SMTP host (blank for Gmail)', secret: false, placeholder: 'smtp.gmail.com' },
+      { key: 'port', label: 'SMTP port (blank for 465)', secret: false, placeholder: '465' },
     ],
-    capabilities: ['Send approved outreach', 'Replies arrive in the mailbox itself'],
+    capabilities: ['Send approved outreach', 'Works with your own domain', 'Replies arrive in the mailbox itself'],
   },
   {
     key: 'whatsapp_business',
