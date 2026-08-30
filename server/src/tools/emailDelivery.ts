@@ -1,15 +1,18 @@
 /**
- * Real email delivery over SMTP.
+ * Real email delivery.
  *
  * This is the piece that turns an approved draft into a message that actually
  * arrives. Everything before it — the approval, the environment kill-switch,
- * the connected-integration check — decides *whether* to call this; this module
- * only performs the delivery and reports honestly whether it succeeded.
+ * the connected-integration check, the daily cap — decides *whether* to call
+ * this; this module only performs the delivery and reports honestly whether it
+ * succeeded.
  *
- * Credentials come from the `gmail` connector: the sending address and a Google
- * App Password, stored encrypted like every other credential. A plain account
- * password will not work — Google requires an App Password for SMTP, which is
- * revocable on its own without touching the account.
+ * Two transports, because one is not always available. SMTP is the obvious
+ * route, but most hosting platforms block outbound SMTP ports on their lower
+ * plans to protect their IP reputation, and a blocked port looks exactly like a
+ * hung connection. Resend delivers over HTTPS instead, which no host blocks, so
+ * it is preferred whenever it is connected. Credentials for both are stored
+ * encrypted like every other connector.
  */
 import nodemailer, { type Transporter } from 'nodemailer';
 import { getCredentials, isActive, recordIntegrationCheck } from '../services/integrations';
@@ -48,7 +51,19 @@ function smtpAccount(): SmtpAccount | null {
   };
 }
 
-export const emailDeliveryAvailable = (): boolean => isActive('gmail');
+/** Either transport counts: the channel is connected if one of them can send. */
+export const emailDeliveryAvailable = (): boolean => isActive('resend') || isActive('gmail');
+
+/**
+ * The address outreach will actually come from, or null when no transport is
+ * configured. It follows the same preference order as delivery, so the envelope
+ * a draft is built with is the one the message is really sent with.
+ */
+export function sendingAddress(): string | null {
+  const viaResend = resendAccount();
+  if (isActive('resend') && viaResend) return viaResend.from;
+  return smtpAccount()?.user ?? null;
+}
 
 export interface EmailPayload {
   to: string;
@@ -124,9 +139,16 @@ export function resetEmailTransport(): void {
  * business to find out.
  */
 export async function verifyEmailConnection(): Promise<DeliveryResult> {
+  // Resend first, matching what delivery actually uses.
+  const viaResend = resendAccount();
+  if (isActive('resend') && viaResend) return verifyResend(viaResend);
+
   const account = smtpAccount();
   if (!account) {
-    return { delivered: false, detail: 'No sending address or password is saved yet.' };
+    return {
+      delivered: false,
+      detail: 'No email transport is configured. Add an API key under Resend, or an address and password under Email (SMTP).',
+    };
   }
   // Gmail is the one provider with a fixed password shape, so a wrong one can
   // be named before the network call rather than after an opaque rejection.
@@ -170,6 +192,11 @@ function explainSmtpError(error: unknown): string {
  * recorded as one that did.
  */
 export async function deliverEmail(payload: EmailPayload): Promise<DeliveryResult> {
+  // HTTPS is preferred: it works on hosts that block SMTP, and a blocked port
+  // is indistinguishable from a hung connection until it times out.
+  const viaResend = resendAccount();
+  if (isActive('resend') && viaResend) return deliverViaResend(payload, viaResend);
+
   const account = smtpAccount();
   if (!account) {
     return { delivered: false, detail: 'The email connector has no sending address or password.' };
@@ -189,6 +216,121 @@ export async function deliverEmail(payload: EmailPayload): Promise<DeliveryResul
     const detail = explainSmtpError(error);
     recordIntegrationCheck('gmail', detail);
     resetEmailTransport();
+    return { delivered: false, detail };
+  }
+}
+
+// --- Resend (HTTPS) ---------------------------------------------------------
+
+const RESEND_ENDPOINT = 'https://api.resend.com/emails';
+const RESEND_TIMEOUT_MS = 15_000;
+
+interface ResendAccount {
+  apiKey: string;
+  from: string;
+}
+
+function resendAccount(): ResendAccount | null {
+  const credentials = getCredentials('resend');
+  const apiKey = credentials.apiKey?.trim();
+  const from = credentials.from?.trim();
+  return apiKey && from ? { apiKey, from } : null;
+}
+
+async function resendRequest(
+  url: string,
+  apiKey: string,
+  init: RequestInit = {},
+): Promise<{ ok: boolean; status: number; body: string }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), RESEND_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', ...init.headers },
+    });
+    return { ok: response.ok, status: response.status, body: await response.text().catch(() => '') };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Turns Resend's JSON error into the sentence that names the fix. */
+function explainResendError(status: number, body: string): string {
+  let message = body;
+  try {
+    message = (JSON.parse(body) as { message?: string }).message ?? body;
+  } catch {
+    /* not JSON — use the raw body */
+  }
+  if (status === 401 || status === 403) {
+    return `Resend rejected the API key: ${message}`;
+  }
+  if (status === 403 || /domain is not verified/i.test(message)) {
+    return `Resend will not send from that address yet: ${message}`;
+  }
+  if (status === 422) {
+    return `Resend rejected the message: ${message}`;
+  }
+  return `Resend returned HTTP ${status}: ${message}`;
+}
+
+async function deliverViaResend(payload: EmailPayload, account: ResendAccount): Promise<DeliveryResult> {
+  try {
+    const result = await resendRequest(RESEND_ENDPOINT, account.apiKey, {
+      method: 'POST',
+      body: JSON.stringify({
+        from: `${payload.fromName} <${account.from}>`,
+        to: [payload.to],
+        subject: payload.subject,
+        text: payload.body,
+        ...(payload.replyTo ? { reply_to: payload.replyTo } : {}),
+      }),
+    });
+
+    if (!result.ok) {
+      const detail = explainResendError(result.status, result.body);
+      recordIntegrationCheck('resend', detail);
+      return { delivered: false, detail };
+    }
+
+    recordIntegrationCheck('resend', null);
+    const id = (() => {
+      try {
+        return (JSON.parse(result.body) as { id?: string }).id ?? 'accepted';
+      } catch {
+        return 'accepted';
+      }
+    })();
+    return { delivered: true, detail: `Accepted by Resend (id ${id}).` };
+  } catch (error) {
+    const detail =
+      error instanceof Error && error.name === 'AbortError'
+        ? 'Resend did not respond in time.'
+        : `Could not reach Resend: ${error instanceof Error ? error.message : String(error)}`;
+    recordIntegrationCheck('resend', detail);
+    return { delivered: false, detail };
+  }
+}
+
+/** Checks the Resend key without sending, by listing the account's domains. */
+async function verifyResend(account: ResendAccount): Promise<DeliveryResult> {
+  try {
+    const result = await resendRequest('https://api.resend.com/domains', account.apiKey);
+    if (!result.ok) {
+      const detail = explainResendError(result.status, result.body);
+      recordIntegrationCheck('resend', detail);
+      return { delivered: false, detail };
+    }
+    recordIntegrationCheck('resend', null);
+    return {
+      delivered: true,
+      detail: `Resend accepted the API key. Outreach will be sent from ${account.from}. No email was sent.`,
+    };
+  } catch (error) {
+    const detail = `Could not reach Resend: ${error instanceof Error ? error.message : String(error)}`;
+    recordIntegrationCheck('resend', detail);
     return { delivered: false, detail };
   }
 }

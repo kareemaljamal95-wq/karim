@@ -10,6 +10,7 @@ export type IntegrationKey =
   | 'website_inspection'
   | 'anthropic'
   | 'gmail'
+  | 'resend'
   | 'google_sheets'
   | 'google_drive'
   | 'google_calendar'
@@ -81,6 +82,18 @@ export const INTEGRATION_CATALOG: IntegrationCatalogEntry[] = [
       { key: 'port', label: 'SMTP port (blank for 465)', secret: false, placeholder: '465' },
     ],
     capabilities: ['Send approved outreach', 'Works with your own domain', 'Replies arrive in the mailbox itself'],
+  },
+  {
+    key: 'resend',
+    name: 'Resend (email API)',
+    category: 'communication',
+    description:
+      'Email delivery over HTTPS instead of SMTP — the way to send from a host that blocks SMTP ports, which most platforms do on their lower plans. Needs an API key and a sending address on a domain verified with Resend. Preferred over the SMTP connector when both are on.',
+    fields: [
+      { key: 'apiKey', label: 'API key', secret: true, placeholder: 're_...' },
+      { key: 'from', label: 'Sending address', secret: false, placeholder: 'you@yourdomain.com' },
+    ],
+    capabilities: ['Send approved outreach over HTTPS', 'Works where SMTP is blocked', 'Sends from your own domain'],
   },
   {
     key: 'whatsapp_business',

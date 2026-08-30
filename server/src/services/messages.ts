@@ -3,8 +3,8 @@ import { newId } from '../util/crypto';
 import { badRequest, conflict, failedDependency, notFound } from '../util/errors';
 import type { MessageChannel, MessageStatus } from '../types';
 import type { MessageQuality } from '../agents/outreachAgent';
-import { getCredentials, isActive } from './integrations';
-import { buildEmail, deliverEmail } from '../tools/emailDelivery';
+import { isActive } from './integrations';
+import { buildEmail, deliverEmail, emailDeliveryAvailable, sendingAddress } from '../tools/emailDelivery';
 import { getSettings } from './settings';
 import { log } from './logger';
 import { getLead, updateLead } from './leads';
@@ -203,12 +203,17 @@ export interface SendOutcome {
   reason: string;
 }
 
-const CHANNEL_INTEGRATION: Record<MessageChannel, 'gmail' | 'whatsapp_business' | null> = {
-  email: 'gmail',
-  whatsapp: 'whatsapp_business',
-  sms: null,
-  linkedin: null,
-};
+/**
+ * Whether a channel has something that can actually deliver.
+ *
+ * Email has two possible transports, so it asks the delivery layer rather than
+ * naming one connector.
+ */
+function channelConnected(channel: MessageChannel): boolean {
+  if (channel === 'email') return emailDeliveryAvailable();
+  if (channel === 'whatsapp') return isActive('whatsapp_business');
+  return false;
+}
 
 /** How many messages actually left the platform since midnight UTC. */
 function countSentToday(): number {
@@ -243,12 +248,12 @@ async function deliverChannel(
     return { delivered: false, detail: 'This lead has no email address on record.' };
   }
 
-  const account = getCredentials('gmail').user?.trim();
-  if (!account) {
-    return { delivered: false, detail: 'The email connector has no sending address configured.' };
+  const from = sendingAddress();
+  if (!from) {
+    return { delivered: false, detail: 'No email transport has a sending address configured.' };
   }
 
-  return deliverEmail(buildEmail(message, lead.email, account, settings));
+  return deliverEmail(buildEmail(message, lead.email, from, settings));
 }
 
 /**
@@ -282,8 +287,7 @@ export async function sendMessage(id: string, actor: string): Promise<SendOutcom
     };
   }
 
-  const integration = CHANNEL_INTEGRATION[message.channel];
-  if (!integration || !isActive(integration)) {
+  if (!channelConnected(message.channel)) {
     throw failedDependency(
       `The ${message.channel} channel has no connected integration, so the message cannot be delivered yet.`,
     );
