@@ -14,6 +14,12 @@ export interface PlatformSettings {
   offeredServices: string[];
   /** Price guidance. Agents may never quote outside these bands without approval. */
   pricingPolicy: string;
+  /**
+   * The public domain the landing page is served on. Settable here as well as
+   * through MARKETING_DOMAIN, so pointing a domain at the platform does not
+   * require a redeploy — the env var still wins when it is set.
+   */
+  marketingDomain: string;
   /** Never allow autonomous mass messaging in the MVP. */
   outboundSendingEnabled: boolean;
   requireApprovalForFirstContact: boolean;
@@ -37,6 +43,7 @@ const DEFAULTS: PlatformSettings = {
   offeredServices: [],
   pricingPolicy:
     'Never quote a specific price. Offer a free scoping call and route any pricing question to a human.',
+  marketingDomain: '',
   outboundSendingEnabled: false,
   requireApprovalForFirstContact: true,
   demoMode: true,
@@ -57,6 +64,7 @@ export function getSettings(): PlatformSettings {
   // Environment kill-switches always win over stored settings — a stored
   // `true` can never enable sending if the deployment disabled it.
   merged.outboundSendingEnabled = merged.outboundSendingEnabled && env.outboundSendingEnabled;
+  merged.marketingDomain = (env.marketingDomain || merged.marketingDomain).trim().toLowerCase();
   return merged;
 }
 

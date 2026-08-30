@@ -111,6 +111,7 @@ const settingsSchema = z.object({
   defaultCountry: z.string().optional(),
   defaultCity: z.string().optional(),
   dailyOutreachCap: z.number().int().min(1).max(1000).optional(),
+  marketingDomain: z.string().max(253).optional(),
 });
 
 systemRouter.patch(

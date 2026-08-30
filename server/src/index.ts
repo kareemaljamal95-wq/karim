@@ -10,6 +10,7 @@ import { apiRouter } from './routes';
 import { attachUser } from './middleware/auth';
 import { errorHandler, notFoundHandler } from './middleware/error';
 import { seedAgents } from './agents/registry';
+import { getSettings } from './services/settings';
 import { seedWorkflows } from './services/workflows';
 import { ensureIntegrationRows } from './services/integrations';
 import { ensureBootstrapAdmin } from './services/users';
@@ -46,13 +47,14 @@ export function createApp(): express.Express {
   // preview. It shares this process because it is one static file: a second
   // service to host it would cost more to run than it does to serve.
   const landingPage = path.join(__dirname, 'site', 'landing.html');
-  const marketingHosts = (env.marketingDomain ? [env.marketingDomain, `www.${env.marketingDomain}`] : []).map(
-    (host) => host.toLowerCase(),
-  );
   if (fs.existsSync(landingPage)) {
     app.get('/landing', (_req, res) => res.sendFile(landingPage));
     app.get('/', (req, res, next) => {
-      if (marketingHosts.includes(req.hostname.toLowerCase())) return res.sendFile(landingPage);
+      // Read per request, so pointing a domain at the platform takes effect as
+      // soon as it is saved in Settings rather than on the next deploy.
+      const domain = getSettings().marketingDomain;
+      const hosts = domain ? [domain, `www.${domain}`] : [];
+      if (hosts.includes(req.hostname.toLowerCase())) return res.sendFile(landingPage);
       return next();
     });
   }
