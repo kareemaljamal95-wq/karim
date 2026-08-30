@@ -8,6 +8,7 @@ import {
   MapPin,
   MessageSquarePlus,
   Phone,
+  Search,
   Send,
   Sparkles,
   Star,
@@ -89,6 +90,16 @@ export function LeadDetailPage() {
       },
     });
 
+  /**
+   * Fetches the lead's own website and re-scores it on what is actually there.
+   * Read-only as far as the business is concerned — nothing is sent to them.
+   */
+  const verifyWebsite = () =>
+    run(() => api(`/leads/${lead.id}/verify-website`, { method: 'POST', body: {} }), {
+      success: 'Website checked — the score now reflects what was found on the site',
+      onSuccess: refetch,
+    });
+
   const draftOutreach = () =>
     run(() => api(`/leads/${lead.id}/draft-outreach`, { method: 'POST', body: {} }), {
       success: 'Drafts generated and sent for approval',
@@ -107,6 +118,18 @@ export function LeadDetailPage() {
         description={`${lead.category} · ${[lead.area, lead.city, lead.country].filter(Boolean).join(', ')}`}
         actions={
           <>
+            {can('analyst') && lead.website && (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={verifyWebsite}
+                disabled={pending}
+                title="Visit this website and record what is actually on it"
+              >
+                {pending ? <Spinner /> : <Search className="h-4 w-4" />}
+                Verify website
+              </button>
+            )}
             {can('analyst') && (
               <button type="button" className="btn-secondary" onClick={draftOutreach} disabled={pending}>
                 {pending ? <Spinner /> : <Sparkles className="h-4 w-4" />}

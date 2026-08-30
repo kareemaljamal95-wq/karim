@@ -7,6 +7,7 @@ import { log } from './logger';
 export type IntegrationKey =
   | 'google_places'
   | 'open_street_map'
+  | 'website_inspection'
   | 'anthropic'
   | 'gmail'
   | 'google_sheets'
@@ -47,6 +48,15 @@ export const INTEGRATION_CATALOG: IntegrationCatalogEntry[] = [
       'Keyless alternative to Google Places, for operators who cannot obtain a Places key. Discovers real businesses through Nominatim and Overpass — no API key, no billing account. Carries phone, website, hours and published email addresses, but no ratings or review counts, so leads from it produce fewer signals.',
     fields: [],
     capabilities: ['Business search by city/area/category', 'Phone, website, email, opening hours'],
+  },
+  {
+    key: 'website_inspection',
+    name: 'Website verification',
+    category: 'discovery',
+    description:
+      "Visits each lead's own website and reports what is actually there — booking, ordering, chat, social profiles, a published email. Turns unknowns into observed evidence, which is what discovery sources cannot supply. No key needed; the platform fetches public pages only.",
+    fields: [],
+    capabilities: ['Booking / ordering / chat detection', 'Social profiles and public email', 'Dead-link detection'],
   },
   {
     key: 'anthropic',

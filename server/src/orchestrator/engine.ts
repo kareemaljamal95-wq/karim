@@ -4,6 +4,7 @@ import { runServiceStrategist, type StrategyResult } from '../agents/serviceStra
 import { runLeadScorer, type LeadScoringResult } from '../agents/leadScorer';
 import { runOutreachAgent, type DraftedMessage } from '../agents/outreachAgent';
 import { getAgent } from '../agents/registry';
+import { inspectWebsite, websiteInspectionAvailable } from '../tools/webEnrichment';
 import type { AgentOutcome } from '../agents/types';
 import { failedChecks, type ValidationReport } from '../agents/verification';
 import type { DiscoveredBusiness } from '../domain/business';
@@ -197,6 +198,39 @@ export async function runDiscoveryWorkflow(input: DiscoveryRunInput): Promise<Di
           attempts: result.attempts,
         });
         updateRun(runId, { demo });
+        continue;
+      }
+
+      // ---- Website verification ------------------------------------------
+      if (node.type === 'tool' && node.tool === 'website_inspection') {
+        const stepId = startStep({
+          runId,
+          seq,
+          nodeId: node.id,
+          label: node.label,
+          kind: node.type,
+          agentKey: null,
+          stepInput: { candidates: analysed.filter((item) => item.business.website).length },
+        });
+
+        if (!websiteInspectionAvailable()) {
+          finishStep(stepId, {
+            status: 'COMPLETED',
+            output: {
+              skipped: true,
+              reason: 'Website verification is not enabled in Integrations, so no site was visited.',
+            },
+            attempts: 1,
+          });
+          continue;
+        }
+
+        const verification = await verifyWebsites(analysed, runId);
+        finishStep(stepId, {
+          status: 'COMPLETED',
+          output: verification,
+          attempts: 1,
+        });
         continue;
       }
 
@@ -679,6 +713,86 @@ interface RetryResult<T> {
  * retryable failure. The orchestrator never accepts output an agent could not
  * validate.
  */
+/** How many sites are fetched at once. Small enough to stay a polite visitor. */
+const INSPECTION_CONCURRENCY = 4;
+
+export interface VerificationSummary {
+  candidates: number;
+  inspected: number;
+  reachable: number;
+  unreachable: number;
+  observationsAdded: number;
+  contactsFound: number;
+}
+
+/**
+ * Visits the websites of the businesses in a run and folds what was actually
+ * found back into their observations.
+ *
+ * This is where unknowns become evidence: a discovery source can say a site is
+ * listed, but only reading the site can show whether it takes bookings. A
+ * business with no website is skipped entirely — there is nothing to look at,
+ * and nothing may be concluded from that.
+ */
+export async function verifyWebsites(
+  items: { business: DiscoveredBusiness }[],
+  runId: string | null,
+): Promise<VerificationSummary> {
+  // Demo businesses carry sample URLs; fetching them would only prove the
+  // sample domain does not exist, and would score a fictional business down.
+  const candidates = items.filter((item) => item.business.website && !item.business.isDemo);
+  const summary: VerificationSummary = {
+    candidates: candidates.length,
+    inspected: 0,
+    reachable: 0,
+    unreachable: 0,
+    observationsAdded: 0,
+    contactsFound: 0,
+  };
+
+  for (let i = 0; i < candidates.length; i += INSPECTION_CONCURRENCY) {
+    const batch = candidates.slice(i, i + INSPECTION_CONCURRENCY);
+    await Promise.all(
+      batch.map(async (item) => {
+        const business = item.business;
+        const result = await inspectWebsite(business.website as string);
+        summary.inspected += 1;
+        if (result.failure) summary.unreachable += 1;
+        else summary.reachable += 1;
+
+        const added = Object.keys(result.observations).length;
+        summary.observationsAdded += added;
+        business.observations = { ...business.observations, ...result.observations };
+
+        // Social profiles and a published email are observed facts, so they are
+        // filled in only where the discovery source had nothing.
+        const newSocials = Object.entries(result.socialLinks).filter(
+          ([platform]) => !business.socialLinks?.[platform],
+        );
+        if (newSocials.length) {
+          business.socialLinks = { ...business.socialLinks, ...Object.fromEntries(newSocials) };
+          summary.contactsFound += newSocials.length;
+        }
+        if (!business.email && result.email) {
+          business.email = result.email;
+          summary.contactsFound += 1;
+        }
+
+        log({
+          actorType: 'agent',
+          actor: 'website_inspection',
+          action: result.failure ? 'inspection.unreachable' : 'inspection.completed',
+          runId,
+          message: `${business.name}: ${result.evidence[0] ?? result.failure ?? 'nothing observed'}`,
+          meta: { website: business.website, evidence: result.evidence, pagesRead: result.pagesRead },
+        });
+      }),
+    );
+  }
+
+  return summary;
+}
+
 async function withRetry<T>(
   agentKey: string,
   fn: () => Promise<AgentOutcome<T>>,

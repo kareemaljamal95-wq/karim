@@ -16,6 +16,7 @@ import { listProjects } from '../services/projects';
 import { listApprovals } from '../services/approvals';
 import { listLogs } from '../services/logger';
 import { runOutreachAgent } from '../agents/outreachAgent';
+import { verifyLeadWebsite } from '../orchestrator/verifyLead';
 import { createMessage } from '../services/messages';
 import { createApproval } from '../services/approvals';
 import { serviceByKey } from '../domain/services';
@@ -148,6 +149,21 @@ leadsRouter.delete(
 const draftSchema = z.object({
   channels: z.array(z.string()).min(1).optional(),
 });
+
+/**
+ * Visits this lead's website and re-scores it on what was actually found.
+ *
+ * Reads only: it fetches public pages and updates the lead's own analysis. It
+ * cannot contact the business.
+ */
+leadsRouter.post(
+  '/:id/verify-website',
+  requireAnalyst,
+  asyncHandler(async (req, res) => {
+    const result = await verifyLeadWebsite(req.params.id, actorOf(req));
+    res.json(result);
+  }),
+);
 
 /**
  * Generates outreach drafts for a single lead on demand. The drafts always land

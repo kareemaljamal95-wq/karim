@@ -29,6 +29,7 @@ discover businesses                                    save to lead database
 |---|---|
 | **AI CEO Orchestrator** | Turns a goal into a plan, delegates each step, validates results, retries recoverable failures, opens approval gates, writes the audit log |
 | **Market Scout** | Discovers businesses by country / city / area / category from public sources |
+| **Website verification** | Visits each lead's own site and records what is actually there — booking, ordering, chat, socials, a published email — turning unknowns into evidence |
 | **Opportunity Analyst** | Detects digital gaps from observed evidence and scores the opportunity 0–100 |
 | **Service Strategist** | Recommends the single best-supported service from the catalogue |
 | **Lead Scoring Agent** | Scores seven dimensions and assigns grade A / B / C |
@@ -118,8 +119,24 @@ Connect integrations from **Integrations** (admin only). Credentials are encrypt
 AES-256-GCM and are never returned to the browser — the API exposes masked hints and connection state
 only. Keys supplied via environment variables are picked up automatically.
 
-Available connectors: Google Places, OpenStreetMap, Anthropic, Gmail, WhatsApp Business, Google
-Sheets / Drive / Calendar, an external CRM, and outbound webhooks.
+Available connectors: Google Places, OpenStreetMap, Website verification, Anthropic, Gmail, WhatsApp
+Business, Google Sheets / Drive / Calendar, an external CRM, and outbound webhooks.
+
+### Turning unknowns into evidence
+
+A discovery source describes a business from the outside. Only its own website shows how it actually
+serves customers, so the **Website verification** connector goes and looks: it fetches the homepage
+plus up to two pages that tend to hold the answer (booking, menu, contact), and records what it finds.
+A lead with no website is skipped — that is an unknown, not a gap — and a site that is listed but does
+not load is itself recorded as a finding. Demo records are never fetched: their URLs are fictional.
+
+Because the server fetches operator-supplied URLs, requests are limited to public http(s) addresses:
+private, loopback, link-local and cloud-metadata ranges are refused before any connection, DNS results
+are re-checked against the same rules, redirects are followed manually with the check applied at every
+hop, and body size, page count and time are all capped.
+
+Run it as part of discovery (the `verify` step in the default workflow) or on a single lead from its
+page — **Verify website** re-scores that lead on what was found.
 
 ### Discovery without a Google key
 

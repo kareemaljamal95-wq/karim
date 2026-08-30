@@ -118,6 +118,68 @@ export interface UpsertResult {
 }
 
 /**
+ * Writes discovered detail and a fresh analysis onto an existing lead.
+ *
+ * COALESCE throughout means a re-run can only add or refresh: a value the
+ * source no longer returns never wipes one already recorded, and the lead's
+ * status — which a human may have moved on — is not touched here at all.
+ */
+export function writeAnalysis(
+  id: string,
+  b: DiscoveredBusiness,
+  a: LeadUpsertInput['analysis'],
+): void {
+  db()
+    .prepare(
+      `UPDATE leads SET
+         phone = COALESCE(@phone, phone),
+         email = COALESCE(@email, email),
+         website = COALESCE(@website, website),
+         maps_url = COALESCE(@maps_url, maps_url),
+         rating = COALESCE(@rating, rating),
+         review_count = COALESCE(@review_count, review_count),
+         opening_hours = COALESCE(@opening_hours, opening_hours),
+         social_links = @social_links,
+         opportunity_score = COALESCE(@opportunity_score, opportunity_score),
+         lead_score = COALESCE(@lead_score, lead_score),
+         lead_grade = COALESCE(@lead_grade, lead_grade),
+         recommended_service = COALESCE(@recommended_service, recommended_service),
+         reason = COALESCE(@reason, reason),
+         problem = COALESCE(@problem, problem),
+         estimated_value = COALESCE(@estimated_value, estimated_value),
+         confidence = COALESCE(@confidence, confidence),
+         signals = COALESCE(@signals, signals),
+         score_breakdown = COALESCE(@score_breakdown, score_breakdown),
+         next_action = COALESCE(@next_action, next_action),
+         updated_at = @updated_at
+       WHERE id = @id`,
+    )
+    .run({
+      id,
+      phone: b.phone ?? null,
+      email: b.email ?? null,
+      website: b.website ?? null,
+      maps_url: b.mapsUrl ?? null,
+      rating: b.rating ?? null,
+      review_count: b.reviewCount ?? null,
+      opening_hours: b.openingHours ?? null,
+      social_links: toJson(b.socialLinks ?? {}),
+      opportunity_score: a?.opportunityScore ?? null,
+      lead_score: a?.leadScore ?? null,
+      lead_grade: a?.leadGrade ?? null,
+      recommended_service: a?.recommendedService ?? null,
+      reason: a?.reason ?? null,
+      problem: a?.problem ?? null,
+      estimated_value: a?.estimatedValue ?? null,
+      confidence: a?.confidence ?? null,
+      signals: a ? toJson(a.signals) : null,
+      score_breakdown: a ? toJson(a.scoreBreakdown) : null,
+      next_action: a?.nextAction ?? null,
+      updated_at: nowIso(),
+    });
+}
+
+/**
  * Inserts a discovered business, or refreshes the analysis on an existing one.
  *
  * Deduplication is enforced by a unique key derived from the strongest
@@ -136,55 +198,7 @@ export function upsertLead(input: LeadUpsertInput): UpsertResult {
   if (existing) {
     // Refresh analysis and any newly-discovered public detail, but never
     // downgrade a status a human has already moved forward.
-    db()
-      .prepare(
-        `UPDATE leads SET
-           phone = COALESCE(@phone, phone),
-           email = COALESCE(@email, email),
-           website = COALESCE(@website, website),
-           maps_url = COALESCE(@maps_url, maps_url),
-           rating = COALESCE(@rating, rating),
-           review_count = COALESCE(@review_count, review_count),
-           opening_hours = COALESCE(@opening_hours, opening_hours),
-           social_links = @social_links,
-           opportunity_score = COALESCE(@opportunity_score, opportunity_score),
-           lead_score = COALESCE(@lead_score, lead_score),
-           lead_grade = COALESCE(@lead_grade, lead_grade),
-           recommended_service = COALESCE(@recommended_service, recommended_service),
-           reason = COALESCE(@reason, reason),
-           problem = COALESCE(@problem, problem),
-           estimated_value = COALESCE(@estimated_value, estimated_value),
-           confidence = COALESCE(@confidence, confidence),
-           signals = COALESCE(@signals, signals),
-           score_breakdown = COALESCE(@score_breakdown, score_breakdown),
-           next_action = COALESCE(@next_action, next_action),
-           updated_at = @updated_at
-         WHERE id = @id`,
-      )
-      .run({
-        id: existing.id,
-        phone: b.phone ?? null,
-        email: b.email ?? null,
-        website: b.website ?? null,
-        maps_url: b.mapsUrl ?? null,
-        rating: b.rating ?? null,
-        review_count: b.reviewCount ?? null,
-        opening_hours: b.openingHours ?? null,
-        social_links: toJson(b.socialLinks ?? {}),
-        opportunity_score: a?.opportunityScore ?? null,
-        lead_score: a?.leadScore ?? null,
-        lead_grade: a?.leadGrade ?? null,
-        recommended_service: a?.recommendedService ?? null,
-        reason: a?.reason ?? null,
-        problem: a?.problem ?? null,
-        estimated_value: a?.estimatedValue ?? null,
-        confidence: a?.confidence ?? null,
-        signals: a ? toJson(a.signals) : null,
-        score_breakdown: a ? toJson(a.scoreBreakdown) : null,
-        next_action: a?.nextAction ?? null,
-        updated_at: now,
-      });
-
+    writeAnalysis(String(existing.id), b, a);
     return { lead: getLead(String(existing.id)), created: false };
   }
 

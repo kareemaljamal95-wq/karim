@@ -26,8 +26,18 @@ export const DEFAULT_WORKFLOW: WorkflowDefinition = {
       type: 'agent',
       agent: 'market_scout',
       label: 'Find businesses',
-      description: 'Discovers businesses from Google Places, or clearly-labelled demo data when it is not connected.',
+      description:
+        'Discovers businesses from Google Places or OpenStreetMap, or clearly-labelled demo data when neither is connected.',
       config: { limit: 12 },
+    },
+    {
+      id: 'verify',
+      type: 'tool',
+      tool: 'website_inspection',
+      label: 'Verify each website',
+      description:
+        "Visits each business's own site and records what is actually there — booking, ordering, chat, socials, a published email — so the analyst reasons from observed pages instead of missing data. Skipped when the connector is off.",
+      config: {},
     },
     {
       id: 'analyse',
@@ -100,7 +110,8 @@ export const DEFAULT_WORKFLOW: WorkflowDefinition = {
   ],
   edges: [
     { from: 'trigger', to: 'discover' },
-    { from: 'discover', to: 'analyse' },
+    { from: 'discover', to: 'verify' },
+    { from: 'verify', to: 'analyse' },
     { from: 'analyse', to: 'strategy' },
     { from: 'strategy', to: 'score' },
     { from: 'score', to: 'save' },
@@ -126,9 +137,48 @@ function mapWorkflow(row: Record<string, unknown>): Workflow {
   };
 }
 
+/**
+ * Adds the website-verification step to an existing default workflow.
+ *
+ * Installs created before the step existed still run the old graph, and the
+ * workflow is data rather than code, so shipping the node is not enough. This
+ * only rewires a graph that still matches the shipped shape in that region —
+ * a workflow an operator has edited is left exactly as they left it.
+ */
+function addVerificationStep(): void {
+  const row = db().prepare('SELECT id, definition FROM workflows WHERE is_default = 1').get() as
+    | { id: string; definition: string }
+    | undefined;
+  if (!row) return;
+
+  const definition = parseJson<WorkflowDefinition>(row.definition, { nodes: [], edges: [] });
+  const hasDiscover = definition.nodes.some((node) => node.id === 'discover');
+  const hasVerify = definition.nodes.some((node) => node.id === 'verify');
+  const shippedEdge = definition.edges.find((edge) => edge.from === 'discover' && edge.to === 'analyse');
+  if (!hasDiscover || hasVerify || !shippedEdge) return;
+
+  const verifyNode = DEFAULT_WORKFLOW.nodes.find((node) => node.id === 'verify');
+  if (!verifyNode) return;
+
+  const discoverAt = definition.nodes.findIndex((node) => node.id === 'discover');
+  definition.nodes.splice(discoverAt + 1, 0, verifyNode);
+  definition.edges = [
+    ...definition.edges.filter((edge) => edge !== shippedEdge),
+    { from: 'discover', to: 'verify' },
+    { from: 'verify', to: 'analyse' },
+  ];
+
+  db()
+    .prepare('UPDATE workflows SET definition = @definition, updated_at = @updated_at WHERE id = @id')
+    .run({ id: row.id, definition: toJson(definition), updated_at: nowIso() });
+}
+
 export function seedWorkflows(): void {
   const existing = db().prepare('SELECT COUNT(*) AS c FROM workflows').get() as { c: number };
-  if (existing.c > 0) return;
+  if (existing.c > 0) {
+    addVerificationStep();
+    return;
+  }
   const now = nowIso();
   db()
     .prepare(
