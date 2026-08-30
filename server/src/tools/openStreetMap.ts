@@ -326,12 +326,34 @@ async function geocode(params: OsmSearchParams): Promise<{ box: BoundingBox; are
 }
 
 /** Builds the Overpass QL query for a set of selectors inside a box. */
-export function overpassQuery(selectors: string[], box: BoundingBox, limit: number): string {
+/** Tags that make a business reachable, and therefore worth returning first. */
+const CONTACT_TAGS = ['website', 'contact:website', 'phone', 'contact:phone', 'email', 'contact:email'];
+
+/**
+ * Builds the Overpass query.
+ *
+ * `contactableOnly` asks for the businesses that carry a website, phone or
+ * email tag. This matters more than it sounds: a city holds far more mapped
+ * businesses than any one search returns, so an unfiltered query hands back an
+ * arbitrary slice — and in regions where volunteers mapped names but not
+ * contact details, that slice is entirely unreachable. Asking for the
+ * contactable ones returns the businesses an operator can actually approach.
+ */
+export function overpassQuery(
+  selectors: string[],
+  box: BoundingBox,
+  limit: number,
+  contactableOnly = false,
+): string {
   const bbox = `${box.south},${box.west},${box.north},${box.east}`;
   const clauses = selectors
-    .map((selector) => {
+    .flatMap((selector) => {
       const [key, value] = selector.split('=');
-      return `nwr["${key}"="${value}"]["name"](${bbox});`;
+      const base = `nwr["${key}"="${value}"]["name"]`;
+      if (!contactableOnly) return [`${base}(${bbox});`];
+      // Overpass has no OR across tags, so each contact tag is its own clause;
+      // the surrounding union deduplicates.
+      return CONTACT_TAGS.map((tag) => `${base}["${tag}"](${bbox});`);
     })
     .join('\n  ');
   return `[out:json][timeout:25];\n(\n  ${clauses}\n);\nout center ${limit};`;
@@ -393,8 +415,21 @@ export async function searchOpenStreetMap(
 
   try {
     const { box, areaNotice } = await geocode(params);
-    const payload = await queryOverpass(overpassQuery(selectors, box, limit));
-    const businesses = (payload.elements ?? [])
+
+    // Reachable businesses first, then fill the batch from the rest. A lead
+    // with no way to contact it is still worth recording, but it should never
+    // crowd out one that can be approached today.
+    const payload = await queryOverpass(overpassQuery(selectors, box, limit, true));
+    const found = new Map((payload.elements ?? []).map((el) => [`${el.type}/${el.id}`, el]));
+
+    if (found.size < limit) {
+      const filler = await queryOverpass(overpassQuery(selectors, box, limit - found.size, false));
+      for (const element of filler.elements ?? []) {
+        const key = `${element.type}/${element.id}`;
+        if (!found.has(key)) found.set(key, element);
+      }
+    }
+    const businesses = [...found.values()]
       .map((element) => mapOsmElement(element, params))
       .filter((business): business is DiscoveredBusiness => business !== null)
       .slice(0, limit);

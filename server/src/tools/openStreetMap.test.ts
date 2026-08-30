@@ -39,6 +39,19 @@ describe('category to OSM tag mapping', () => {
     }
   });
 
+  test('asks for the businesses that carry a way to contact them', () => {
+    const box = { south: 24.6, north: 24.8, west: 46.6, east: 46.8, label: 'Riyadh' };
+    const contactable = overpassQuery(['amenity=dentist'], box, 12, true);
+    // One clause per contact tag, because Overpass cannot OR across tags.
+    assert.match(contactable, /\["amenity"="dentist"\]\["name"\]\["website"\]/);
+    assert.match(contactable, /\["contact:phone"\]/);
+    assert.match(contactable, /\["email"\]/);
+
+    // The unfiltered form stays available to fill the rest of the batch.
+    const anyBusiness = overpassQuery(['amenity=dentist'], box, 12, false);
+    assert.doesNotMatch(anyBusiness, /\["website"\]/);
+  });
+
   test('the query asks only for named features inside the box', () => {
     const query = overpassQuery(
       ['amenity=restaurant'],
