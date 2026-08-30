@@ -183,7 +183,10 @@ export function mapOsmElement(element: OsmElement, params: OsmSearchParams): Dis
     name,
     category: labelFor(tags, params.category),
     country: params.country,
-    city: tags['addr:city']?.trim() || params.city,
+    // `addr:city` is tagged in the local language ("دبي"), which would split the
+    // CRM's city filter in two. The English variant, where mapped, is the same
+    // fact in the language the rest of the record uses.
+    city: tags['addr:city:en']?.trim() || tags['addr:city']?.trim() || params.city,
     area: params.area ?? '',
     address: addressOf(tags),
     phone: tags.phone ?? tags['contact:phone'] ?? null,

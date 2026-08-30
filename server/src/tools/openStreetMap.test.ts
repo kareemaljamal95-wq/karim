@@ -166,4 +166,22 @@ describe('mapping an Overpass element to a lead', () => {
     assert.equal(mapOsmElement(other, params)?.city, 'Diriyah');
     assert.equal(mapOsmElement({ type: 'node', id: 10, tags: { name: 'X', shop: 'beauty' } }, params)?.city, 'Riyadh');
   });
+
+  test('uses the English city variant so the CRM filter does not split by language', () => {
+    // Real Dubai records tag the city in Arabic and English at once.
+    const dubai: OsmElement = {
+      type: 'node',
+      id: 11,
+      tags: { name: 'Al Qasr', tourism: 'hotel', 'addr:city': 'دبي', 'addr:city:en': 'Dubai' },
+    };
+    assert.equal(mapOsmElement(dubai, params)?.city, 'Dubai');
+
+    // With no English variant the local name is kept — it is what the map says.
+    const arabicOnly: OsmElement = {
+      type: 'node',
+      id: 12,
+      tags: { name: 'فندق', tourism: 'hotel', 'addr:city': 'دبي' },
+    };
+    assert.equal(mapOsmElement(arabicOnly, params)?.city, 'دبي');
+  });
 });
