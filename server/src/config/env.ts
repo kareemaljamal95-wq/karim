@@ -41,6 +41,14 @@ export const env = {
   // Bootstrap admin (created on first run only)
   bootstrapAdminEmail: process.env.BOOTSTRAP_ADMIN_EMAIL ?? 'admin@ai-ceo.local',
   bootstrapAdminPassword: process.env.BOOTSTRAP_ADMIN_PASSWORD ?? 'ChangeMe!2024',
+  /**
+   * Break-glass recovery. When set, the admin password is reset to this value
+   * on boot. It grants nothing new: anyone able to set a variable on the
+   * service can already read APP_SECRET, JWT_SECRET and the database file.
+   * It exists because the alternative to a forgotten password was deleting the
+   * volume — which takes every lead and message with it.
+   */
+  adminPasswordReset: process.env.ADMIN_PASSWORD_RESET ?? '',
 
   // LLM
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
@@ -83,6 +91,12 @@ export function assertProductionSecrets(): string[] {
   if (env.appSecret.startsWith('dev-only')) warnings.push('APP_SECRET is not set.');
   if (env.bootstrapAdminPassword === 'ChangeMe!2024') {
     warnings.push('BOOTSTRAP_ADMIN_PASSWORD is still the default.');
+  }
+  if (env.adminPasswordReset) {
+    warnings.push(
+      'ADMIN_PASSWORD_RESET is still set. Remove it once you have signed in — ' +
+        'while it is set, that password is the admin password.',
+    );
   }
   return warnings;
 }

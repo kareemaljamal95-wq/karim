@@ -13,7 +13,7 @@ import { seedAgents } from './agents/registry';
 import { getSettings } from './services/settings';
 import { seedWorkflows } from './services/workflows';
 import { ensureIntegrationRows } from './services/integrations';
-import { ensureBootstrapAdmin } from './services/users';
+import { applyAdminPasswordReset, ensureBootstrapAdmin } from './services/users';
 import { listLeads } from './services/leads';
 import { seedDemoData } from './db/seed-demo';
 import { log } from './services/logger';
@@ -92,6 +92,21 @@ export function bootstrap(): void {
       actorType: 'system',
       action: 'system.bootstrap',
       message: `Bootstrap admin account created for ${admin.email}`,
+    });
+  }
+
+  const recovered = applyAdminPasswordReset();
+  if (recovered) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `\n  [recovery] Admin password reset for ${recovered.email}.` +
+        '\n  Sign in, change it from Settings → Team, then REMOVE the' +
+        ' ADMIN_PASSWORD_RESET variable.\n',
+    );
+    log({
+      actorType: 'system',
+      action: 'user.password_recovered',
+      message: `Admin password reset on boot for ${recovered.email} via ADMIN_PASSWORD_RESET`,
     });
   }
 

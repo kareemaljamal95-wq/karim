@@ -115,6 +115,59 @@ export function verifyCredentials(email: string, password: string): UserRecord {
   return mapUser(row);
 }
 
+/**
+ * Break-glass password recovery, applied on boot when `ADMIN_PASSWORD_RESET`
+ * is set.
+ *
+ * There is no "forgot password" email on a platform that may have no mail
+ * channel connected yet, so without this the only way back into a locked
+ * account is deleting the volume — which destroys every lead, message and
+ * approval along with it.
+ *
+ * Deliberately narrow:
+ * - only an admin account is ever touched, never an operator or analyst;
+ * - a restart with the variable still set is a no-op, because the password is
+ *   already the requested one, so it cannot silently undo a later change;
+ * - a too-short value is refused rather than weakening the account.
+ *
+ * Returns the account whose password changed, or null when nothing was done.
+ */
+export function applyAdminPasswordReset(
+  password: string = env.adminPasswordReset,
+): UserRecord | null {
+  if (!password) return null;
+  if (password.length < 8) {
+    throw badRequest('ADMIN_PASSWORD_RESET must be at least 8 characters');
+  }
+
+  const target = (db()
+    .prepare(
+      `SELECT * FROM users WHERE role = 'admin'
+       ORDER BY (email = ?) DESC, created_at ASC LIMIT 1`,
+    )
+    .get(env.bootstrapAdminEmail.trim().toLowerCase()) ?? undefined) as
+    | Record<string, unknown>
+    | undefined;
+  if (!target) return null;
+
+  // Already the requested password: every restart after the first lands here,
+  // so leaving the variable set does not keep rewriting the account.
+  if (bcrypt.compareSync(password, String(target.password_hash))) return null;
+
+  db()
+    .prepare(
+      `UPDATE users SET password_hash = @password_hash, active = 1, updated_at = @updated_at
+       WHERE id = @id`,
+    )
+    .run({
+      id: String(target.id),
+      password_hash: bcrypt.hashSync(password, 10),
+      updated_at: nowIso(),
+    });
+
+  return findUserById(String(target.id));
+}
+
 /** Creates the bootstrap admin the first time the platform starts. */
 export function ensureBootstrapAdmin(): UserRecord | null {
   const count = db().prepare('SELECT COUNT(*) AS c FROM users').get() as { c: number };

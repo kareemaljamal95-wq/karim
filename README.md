@@ -91,6 +91,13 @@ npm run dev               # API on :4000, dashboard on :5173
 Sign in with `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` (defaults
 `admin@ai-ceo.local` / `ChangeMe!2024`). The admin account is created on first run only.
 
+**Locked out?** There is no password-reset email, because a fresh install has no
+mail channel connected. Set `ADMIN_PASSWORD_RESET` to a new password and restart:
+the admin account is reset to it (and re-enabled, if it was disabled). Sign in,
+change the password from Settings → Team, then remove the variable — while it is
+set, that value *is* the admin password. It grants nothing new, since anyone who
+can set a variable can already read `APP_SECRET` and the database.
+
 ```bash
 npm run build     # builds the dashboard and compiles the server
 npm start         # single process serving the API and the built dashboard
