@@ -114,6 +114,35 @@ describe('the dispatch gate', () => {
     assert.equal(messages.getMessage(draft.id).sentAt, null);
   });
 
+  test('never delivers to a demo record, however it was approved', async () => {
+    const { lead: demoLead } = upsertLead({
+      business: {
+        name: 'Sample Salon',
+        category: 'Beauty salons',
+        country: 'United Arab Emirates',
+        city: 'Dubai',
+        area: '',
+        email: 'owner@sample-salon.example.com',
+        source: 'demo',
+        isDemo: true,
+        externalId: 'demo:sample:1',
+      },
+    });
+    const draft = messages.createMessage({
+      leadId: demoLead.id,
+      channel: 'email',
+      subject: 'A note',
+      body: 'Hello there,',
+      isDemo: true,
+    });
+    messages.markApproved(draft.id, 'tester');
+
+    const result = await messages.sendMessage(draft.id, 'tester');
+    assert.equal(result.dispatched, false);
+    assert.match(result.reason, /demo record/i);
+    assert.equal(messages.getMessage(draft.id).status, 'APPROVED');
+  });
+
   test('stops once the daily cap is reached', async () => {
     updateSettings({ dailyOutreachCap: 1 });
     // Fill the cap with a message already delivered today. Written straight to

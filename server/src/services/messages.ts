@@ -287,6 +287,19 @@ export async function sendMessage(id: string, actor: string): Promise<SendOutcom
     };
   }
 
+  // A demo record's address is fictional, so a send can only bounce — and a
+  // bounce from a new domain costs sender reputation that takes weeks to earn
+  // back. The queue mixes demo and live leads by design, so the gate is what
+  // keeps a sample record from ever reaching a mail server.
+  if (message.isDemo || getLead(message.leadId).isDemo) {
+    return {
+      message,
+      dispatched: false,
+      reason:
+        'This message belongs to a demo record, whose contact details are fictional. It stays approved and is never delivered.',
+    };
+  }
+
   if (!channelConnected(message.channel)) {
     throw failedDependency(
       `The ${message.channel} channel has no connected integration, so the message cannot be delivered yet.`,
