@@ -11,6 +11,7 @@ import {
   markSentManually,
   sendMessage,
 } from '../services/messages';
+import { redraftMessage } from '../orchestrator/redraftMessage';
 import { findPendingApprovalFor, recordDecision } from '../services/approvals';
 import { actorOf, asyncHandler, parseIntOr } from '../util/http';
 import { getSettings } from '../services/settings';
@@ -54,6 +55,24 @@ messagesRouter.patch(
   asyncHandler(async (req, res) => {
     const patch = editSchema.parse(req.body);
     res.json({ message: editMessage(req.params.id, patch, actorOf(req)) });
+  }),
+);
+
+/**
+ * Rewrites a draft from the lead's current analysis. Returns it to the approval
+ * queue, because nobody has read the new wording yet.
+ */
+messagesRouter.post(
+  '/:id/redraft',
+  requireOperator,
+  asyncHandler(async (req, res) => {
+    const result = await redraftMessage(req.params.id, actorOf(req));
+    res.json({
+      ...result,
+      note: result.changed
+        ? 'Re-drafted from the current analysis. Read it again before approving.'
+        : 'The analysis has not changed, so the draft is already up to date.',
+    });
   }),
 );
 

@@ -1,6 +1,16 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, Check, ClipboardCheck, MessageSquare, Pencil, Send, ShieldCheck, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  Check,
+  ClipboardCheck,
+  MessageSquare,
+  Pencil,
+  RefreshCw,
+  Send,
+  ShieldCheck,
+  X,
+} from 'lucide-react';
 import { api } from '../lib/api';
 import { useAction, useAuth, useQuery, useSystemStatus } from '../lib/hooks';
 import { relativeTime } from '../lib/format';
@@ -86,6 +96,23 @@ export function MessagesPage() {
       },
     });
   };
+
+  /**
+   * Rewrites the draft from the lead's analysis as it stands now. A draft
+   * written before the lead's website was verified — or before a model was
+   * connected — describes a business the platform no longer sees that way.
+   */
+  const redraft = (message: Message) =>
+    run<{ changed: boolean; note: string }>(
+      () => api(`/messages/${message.id}/redraft`, { method: 'POST', body: {} }),
+      {
+        onSuccess: (result) => {
+          refetch();
+          refresh();
+          if (result) run(async () => result, { success: result.note });
+        },
+      },
+    );
 
   const send = (message: Message) =>
     run<{ dispatched: boolean; reason: string }>(
@@ -195,6 +222,18 @@ export function MessagesPage() {
                     <button type="button" className="btn-secondary" onClick={() => setEditing(message)}>
                       <Pencil className="h-4 w-4" />
                       Edit
+                    </button>
+                  )}
+                  {message.status !== 'SENT' && (
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => redraft(message)}
+                      disabled={pending}
+                      title="Rewrite this draft from the lead's current analysis"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Re-draft
                     </button>
                   )}
                   {message.status === 'APPROVAL_REQUIRED' && (

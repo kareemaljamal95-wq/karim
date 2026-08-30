@@ -132,7 +132,7 @@ export function listMessages(
 /** Editing a message keeps it in the approval queue — edits never auto-approve. */
 export function editMessage(
   id: string,
-  patch: { subject?: string | null; body?: string },
+  patch: { subject?: string | null; body?: string; quality?: Partial<MessageQuality> },
   actor: string,
 ): Message {
   const message = getMessage(id);
@@ -143,6 +143,7 @@ export function editMessage(
       `UPDATE messages SET
          subject = CASE WHEN @subject_set = 1 THEN @subject ELSE subject END,
          body = COALESCE(@body, body),
+         quality = COALESCE(@quality, quality),
          edited_by = @editor,
          status = 'APPROVAL_REQUIRED',
          updated_at = @updated_at
@@ -153,6 +154,10 @@ export function editMessage(
       subject: patch.subject ?? null,
       subject_set: patch.subject === undefined ? 0 : 1,
       body: patch.body ?? null,
+      // The stored score describes the stored text. Replacing one without the
+      // other would leave the queue showing a quality report for copy that is
+      // no longer there.
+      quality: patch.quality ? toJson(patch.quality) : null,
       editor: actor,
       updated_at: nowIso(),
     });
