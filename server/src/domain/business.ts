@@ -28,7 +28,7 @@ export interface DiscoveredBusiness {
     respondsToReviews?: boolean;
     priceLevel?: number;
   };
-  source: 'google_places' | 'demo' | 'manual' | 'import';
+  source: 'google_places' | 'openstreetmap' | 'demo' | 'manual' | 'import';
   isDemo: boolean;
   externalId?: string | null;
 }

@@ -1,5 +1,6 @@
 import { generateDemoBusinesses, DEMO_NOTICE } from './demoData';
 import { googlePlacesAvailable, searchGooglePlaces } from './googlePlaces';
+import { openStreetMapAvailable, searchOpenStreetMap } from './openStreetMap';
 import { isActive } from '../services/integrations';
 import { log } from '../services/logger';
 import type { DiscoveredBusiness } from '../domain/business';
@@ -25,9 +26,10 @@ export function listTools(): ToolDescriptor[] {
     {
       key: 'business_discovery',
       name: 'Business discovery',
-      description: 'Finds businesses by country, city, area and category.',
-      requires: 'google_places',
-      available: googlePlacesAvailable(),
+      description:
+        'Finds businesses by country, city, area and category. Uses Google Places when connected, OpenStreetMap otherwise.',
+      requires: googlePlacesAvailable() ? 'google_places' : 'open_street_map',
+      available: googlePlacesAvailable() || openStreetMapAvailable(),
       hasDemoFallback: true,
     },
     {
@@ -73,9 +75,11 @@ export function listTools(): ToolDescriptor[] {
   ];
 }
 
+export type DiscoverySource = 'google_places' | 'openstreetmap' | 'demo';
+
 export interface DiscoveryResult {
   businesses: DiscoveredBusiness[];
-  source: 'google_places' | 'demo';
+  source: DiscoverySource;
   demo: boolean;
   query: string;
   notice: string | null;
@@ -83,54 +87,65 @@ export interface DiscoveryResult {
   degradedReason: string | null;
 }
 
-/**
- * Discovery entry point used by the Market Scout.
- *
- * Live Places data is preferred whenever the integration is connected. If it is
- * not connected — or a live call fails — the platform returns clearly-labelled
- * demo data instead of failing the run, and records why.
- */
-export async function discoverBusinesses(params: {
+export interface DiscoveryParams {
   country: string;
   city: string;
   area?: string;
   category: string;
   limit?: number;
   runId?: string | null;
-}): Promise<DiscoveryResult> {
+}
+
+/** Live sources in preference order, filtered to the ones actually connected. */
+function liveSources(): {
+  key: Exclude<DiscoverySource, 'demo'>;
+  search: (
+    params: DiscoveryParams,
+  ) => Promise<{ businesses: DiscoveredBusiness[]; query: string; notice?: string | null }>;
+}[] {
+  return [
+    { key: 'google_places' as const, available: googlePlacesAvailable(), search: searchGooglePlaces },
+    { key: 'openstreetmap' as const, available: openStreetMapAvailable(), search: searchOpenStreetMap },
+  ]
+    .filter((source) => source.available)
+    .map(({ key, search }) => ({ key, search }));
+}
+
+/**
+ * Discovery entry point used by the Market Scout.
+ *
+ * Live data is preferred whenever a discovery integration is connected, Google
+ * Places first and OpenStreetMap second. If a source fails the next one is
+ * tried, and if none succeeds the platform returns clearly-labelled demo data
+ * rather than failing the run — recording why in the audit log either way.
+ */
+export async function discoverBusinesses(params: DiscoveryParams): Promise<DiscoveryResult> {
   const locationParts = [params.area, params.city, params.country].filter(Boolean).join(', ');
   const query = `${params.category} in ${locationParts}`;
+  let lastFailure: string | null = null;
 
-  if (googlePlacesAvailable()) {
+  for (const source of liveSources()) {
     try {
-      const live = await searchGooglePlaces(params);
+      const live = await source.search(params);
       return {
         businesses: live.businesses,
-        source: 'google_places',
+        source: source.key,
         demo: false,
         query: live.query,
-        notice: null,
-        degradedReason: null,
+        notice: live.notice ?? null,
+        degradedReason: lastFailure,
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown discovery error';
+      lastFailure = error instanceof Error ? error.message : 'Unknown discovery error';
       log({
         level: 'warn',
         actorType: 'agent',
         actor: 'market_scout',
         action: 'discovery.fallback',
         runId: params.runId ?? null,
-        message: `Live discovery failed, using demo data instead: ${message}`,
-        meta: { query },
+        message: `Discovery via ${source.key} failed: ${lastFailure}`,
+        meta: { query, source: source.key },
       });
-      return {
-        businesses: generateDemoBusinesses(params),
-        source: 'demo',
-        demo: true,
-        query,
-        notice: DEMO_NOTICE,
-        degradedReason: message,
-      };
     }
   }
 
@@ -140,6 +155,6 @@ export async function discoverBusinesses(params: {
     demo: true,
     query,
     notice: DEMO_NOTICE,
-    degradedReason: null,
+    degradedReason: lastFailure,
   };
 }

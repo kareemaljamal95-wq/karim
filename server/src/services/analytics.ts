@@ -3,6 +3,7 @@ import { serviceByKey } from '../domain/services';
 import { getSettings } from './settings';
 import { llmAvailable } from '../llm/provider';
 import { googlePlacesAvailable } from '../tools/googlePlaces';
+import { openStreetMapAvailable } from '../tools/openStreetMap';
 
 export interface OverviewMetrics {
   totalLeads: number;
@@ -238,9 +239,12 @@ export interface SystemStatus {
 export function systemStatus(): SystemStatus {
   const settings = getSettings();
   const metrics = overviewMetrics();
+  const liveDiscovery = googlePlacesAvailable() || openStreetMapAvailable();
   return {
-    demoMode: !googlePlacesAvailable(),
-    liveDiscovery: googlePlacesAvailable(),
+    // Either discovery source counts as live: what makes a run "demo" is that
+    // no real source is connected, not which one it is.
+    demoMode: !liveDiscovery,
+    liveDiscovery,
     liveReasoning: llmAvailable(),
     outboundSendingEnabled: settings.outboundSendingEnabled,
     pendingApprovals: metrics.pendingApprovals,

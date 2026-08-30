@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS research_runs (
   city        TEXT NOT NULL,
   area        TEXT NOT NULL DEFAULT '',
   category    TEXT NOT NULL,
-  source      TEXT NOT NULL,        -- google_places | demo
+  source      TEXT NOT NULL,        -- google_places | openstreetmap | demo | manual | import
   demo        INTEGER NOT NULL DEFAULT 1,
   discovered  INTEGER NOT NULL DEFAULT 0,
   imported    INTEGER NOT NULL DEFAULT 0,

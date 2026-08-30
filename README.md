@@ -103,7 +103,7 @@ data is real:
 
 | Without keys | With keys |
 |---|---|
-| Market Scout returns deterministic sample businesses, flagged `isDemo` end to end (badges in the UI, a `DEMO DATA` column in the CSV export) | Google Places supplies real businesses |
+| Market Scout returns deterministic sample businesses, flagged `isDemo` end to end (badges in the UI, a `DEMO DATA` column in the CSV export) | Google Places — or the keyless OpenStreetMap connector — supplies real businesses |
 | Agents use a deterministic rule engine for narrative and outreach copy | Claude writes the analysis and the outreach copy |
 | Scores, evidence, workflow, approvals and audit log behave identically | Identical |
 
@@ -118,8 +118,22 @@ Connect integrations from **Integrations** (admin only). Credentials are encrypt
 AES-256-GCM and are never returned to the browser — the API exposes masked hints and connection state
 only. Keys supplied via environment variables are picked up automatically.
 
-Available connectors: Google Places, Anthropic, Gmail, WhatsApp Business, Google Sheets / Drive /
-Calendar, an external CRM, and outbound webhooks.
+Available connectors: Google Places, OpenStreetMap, Anthropic, Gmail, WhatsApp Business, Google
+Sheets / Drive / Calendar, an external CRM, and outbound webhooks.
+
+### Discovery without a Google key
+
+Google Places needs a billing-enabled Cloud project, which in some countries is only sold through a
+reseller and only to registered companies. The **OpenStreetMap** connector is the way around that: no
+key, no billing, no contract — switch it on in Integrations and the Market Scout queries Nominatim
+and Overpass instead. Places is still preferred whenever it is connected; OSM is the fallback, and
+labelled demo data remains the last resort.
+
+The trade-off is stated rather than hidden. OSM carries phone numbers, websites, opening hours and
+published email addresses — which Places does not expose — but no ratings and no review counts, so
+those stay unknown and the lead score leans on fewer dimensions. And because the map is
+volunteer-maintained, a missing website tag is treated as *unrecorded*, never as proof that a
+business has no site; only Places, which lists every site it knows, can support that conclusion.
 
 ---
 

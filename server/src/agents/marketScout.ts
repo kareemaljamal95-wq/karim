@@ -1,4 +1,4 @@
-import { discoverBusinesses } from '../tools/registry';
+import { discoverBusinesses, type DiscoverySource } from '../tools/registry';
 import { dedupeKey, isPlausibleEmail, type DiscoveredBusiness } from '../domain/business';
 import { db } from '../db';
 import { Verifier } from './verification';
@@ -13,9 +13,15 @@ export interface ScoutInput {
   limit?: number;
 }
 
+const SOURCE_LABELS: Record<DiscoverySource, string> = {
+  google_places: 'Google Places',
+  openstreetmap: 'OpenStreetMap',
+  demo: 'demo',
+};
+
 export interface ScoutResult {
   businesses: DiscoveredBusiness[];
-  source: 'google_places' | 'demo';
+  source: DiscoverySource;
   demo: boolean;
   query: string;
   notice: string | null;
@@ -90,10 +96,10 @@ export async function runMarketScout(
     )
     .expect(
       'live_source_used',
-      discovery.source === 'google_places',
-      discovery.source === 'google_places'
-        ? 'Results came from the live Google Places integration.'
-        : 'Results are clearly-labelled demo data because no live discovery integration is connected.',
+      !discovery.demo,
+      discovery.demo
+        ? 'Results are clearly-labelled demo data because no live discovery integration is connected.'
+        : `Results came from the live ${SOURCE_LABELS[discovery.source]} integration.`,
     )
     .expect(
       'results_found',

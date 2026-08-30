@@ -6,6 +6,7 @@ import { log } from './logger';
 
 export type IntegrationKey =
   | 'google_places'
+  | 'open_street_map'
   | 'anthropic'
   | 'gmail'
   | 'google_sheets'
@@ -37,6 +38,15 @@ export const INTEGRATION_CATALOG: IntegrationCatalogEntry[] = [
     fields: [{ key: 'apiKey', label: 'API key', secret: true, placeholder: 'AIza...' }],
     envVar: 'GOOGLE_PLACES_API_KEY',
     capabilities: ['Business search by city/area/category', 'Ratings, reviews, hours, website'],
+  },
+  {
+    key: 'open_street_map',
+    name: 'OpenStreetMap',
+    category: 'discovery',
+    description:
+      'Keyless alternative to Google Places, for operators who cannot obtain a Places key. Discovers real businesses through Nominatim and Overpass — no API key, no billing account. Carries phone, website, hours and published email addresses, but no ratings or review counts, so leads from it produce fewer signals.',
+    fields: [],
+    capabilities: ['Business search by city/area/category', 'Phone, website, email, opening hours'],
   },
   {
     key: 'anthropic',
@@ -193,8 +203,10 @@ export function isConfigured(key: IntegrationKey): boolean {
   if (!entry) return false;
   const creds = getCredentials(key);
   const requiredSecrets = entry.fields.filter((f) => f.secret).map((f) => f.key);
-  const hasSecrets = requiredSecrets.every((f) => Boolean(creds[f]));
-  return hasSecrets && requiredSecrets.length > 0;
+  // A connector with no secrets to supply (OpenStreetMap) needs nothing but the
+  // admin's decision to switch it on, which `isActive` checks separately.
+  if (requiredSecrets.length === 0) return true;
+  return requiredSecrets.every((f) => Boolean(creds[f]));
 }
 
 /** Configured AND switched on by an admin. */
