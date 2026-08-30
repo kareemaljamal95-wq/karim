@@ -68,6 +68,12 @@ export const env = {
   outboundSendingEnabled: bool(process.env.OUTBOUND_SENDING_ENABLED, false),
 
   corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:5173',
+  /**
+   * Public marketing domain. When a request arrives on it, the root path serves
+   * the landing page instead of the dashboard, so one deployment can answer on
+   * both names.
+   */
+  marketingDomain: (process.env.MARKETING_DOMAIN ?? '').trim().toLowerCase(),
 } as const;
 
 export function assertProductionSecrets(): string[] {

@@ -2,7 +2,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const assets = [['src/db/schema.sql', 'dist/db/schema.sql']];
+const assets = [
+  ['src/db/schema.sql', 'dist/db/schema.sql'],
+  ['src/site/landing.html', 'dist/site/landing.html'],
+];
 
 for (const [from, to] of assets) {
   const src = path.resolve(__dirname, '..', from);

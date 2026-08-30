@@ -42,6 +42,21 @@ export function createApp(): express.Express {
 
   app.use('/api', apiRouter);
 
+  // The public site, served on the marketing domain and at /landing for a
+  // preview. It shares this process because it is one static file: a second
+  // service to host it would cost more to run than it does to serve.
+  const landingPage = path.join(__dirname, 'site', 'landing.html');
+  const marketingHosts = (env.marketingDomain ? [env.marketingDomain, `www.${env.marketingDomain}`] : []).map(
+    (host) => host.toLowerCase(),
+  );
+  if (fs.existsSync(landingPage)) {
+    app.get('/landing', (_req, res) => res.sendFile(landingPage));
+    app.get('/', (req, res, next) => {
+      if (marketingHosts.includes(req.hostname.toLowerCase())) return res.sendFile(landingPage);
+      return next();
+    });
+  }
+
   // Serve the built dashboard when it exists (production single-process mode).
   const webDist = path.resolve(__dirname, '../../web/dist');
   if (fs.existsSync(webDist)) {
