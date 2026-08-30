@@ -3,6 +3,9 @@ import { serviceByKey } from '../domain/services';
 import { getSettings } from './settings';
 import { llmAvailable } from '../llm/provider';
 import { isHealthy } from './integrations';
+import { emailDeliveryAvailable } from '../tools/emailDelivery';
+import { env } from '../config/env';
+import type { PlatformSettings } from './settings';
 import { googlePlacesAvailable } from '../tools/googlePlaces';
 import { openStreetMapAvailable } from '../tools/openStreetMap';
 
@@ -19,6 +22,8 @@ export interface OverviewMetrics {
   estimatedPipelineValue: number;
   demoLeads: number;
   liveLeads: number;
+  /** Live leads with an email or a phone — the ones outreach can actually reach. */
+  contactableLeads: number;
   gradeCounts: { A: number; B: number; C: number };
 }
 
@@ -48,6 +53,9 @@ export function overviewMetrics(): OverviewMetrics {
     ),
     demoLeads: scalar('SELECT COUNT(*) AS c FROM leads WHERE is_demo = 1'),
     liveLeads: scalar('SELECT COUNT(*) AS c FROM leads WHERE is_demo = 0'),
+    contactableLeads: scalar(
+      "SELECT COUNT(*) AS c FROM leads WHERE is_demo = 0 AND (COALESCE(email, '') <> '' OR COALESCE(phone, '') <> '')",
+    ),
     gradeCounts: {
       A: scalar(`SELECT COUNT(*) AS c FROM leads WHERE lead_grade = 'A'`),
       B: scalar(`SELECT COUNT(*) AS c FROM leads WHERE lead_grade = 'B'`),
@@ -234,6 +242,58 @@ export interface SystemStatus {
   pendingApprovals: number;
   demoLeads: number;
   liveLeads: number;
+  /** Everything still standing between the platform and its first real send. */
+  launchBlockers: { key: string; title: string; detail: string }[];
+}
+
+/**
+ * What is missing before outreach can actually reach a business.
+ *
+ * Each entry is a fact about this deployment, not advice: an operator can read
+ * it and know exactly what remains, without asking anyone.
+ */
+function launchBlockers(settings: PlatformSettings): SystemStatus['launchBlockers'] {
+  const blockers: SystemStatus['launchBlockers'] = [];
+
+  if (!emailDeliveryAvailable()) {
+    blockers.push({
+      key: 'email_transport',
+      title: 'No email transport is connected',
+      detail:
+        'Connect Resend (delivers over HTTPS, works on hosts that block SMTP ports) or the SMTP connector in Integrations. Without one, an approved message stays queued.',
+    });
+  }
+  if (!env.outboundSendingEnabled) {
+    blockers.push({
+      key: 'environment_switch',
+      title: 'Sending is disabled in the environment',
+      detail: 'Set OUTBOUND_SENDING_ENABLED=true where the app is deployed, then redeploy.',
+    });
+  }
+  if (!settings.outboundSendingEnabled) {
+    blockers.push({
+      key: 'settings_switch',
+      title: 'Sending is switched off in Settings',
+      detail: 'Turn on outbound sending in Settings once you have tested a message to yourself.',
+    });
+  }
+  if (!settings.companyName.trim() || settings.companyName === 'Your Agency' || !settings.senderName.trim()) {
+    blockers.push({
+      key: 'identity',
+      title: 'Company identity is incomplete',
+      detail: 'Fill in the company and sender name in Settings — both appear in every message.',
+    });
+  }
+  if (overviewMetrics().contactableLeads === 0) {
+    blockers.push({
+      key: 'contactable_leads',
+      title: 'No lead has a way to contact it',
+      detail:
+        'Run market research, or add a website to a lead and use Verify website to find a published address.',
+    });
+  }
+
+  return blockers;
 }
 
 /** Powers the persistent "what is real vs demo" banner in the dashboard. */
@@ -252,5 +312,6 @@ export function systemStatus(): SystemStatus {
     pendingApprovals: metrics.pendingApprovals,
     demoLeads: metrics.demoLeads,
     liveLeads: metrics.liveLeads,
+    launchBlockers: launchBlockers(settings),
   };
 }

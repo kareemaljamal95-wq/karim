@@ -81,6 +81,20 @@ export function OverviewPage() {
         }
       />
 
+      {status.launchBlockers.length > 0 && (
+        <InfoNote tone="warning">
+          <strong>Before outreach can reach anyone ({status.launchBlockers.length}):</strong>
+          <ul className="mt-2 space-y-1.5">
+            {status.launchBlockers.map((blocker) => (
+              <li key={blocker.key}>
+                <span className="font-medium">{blocker.title}.</span>{' '}
+                <span className="text-slate-600 dark:text-slate-400">{blocker.detail}</span>
+              </li>
+            ))}
+          </ul>
+        </InfoNote>
+      )}
+
       {status.demoMode && (
         <InfoNote tone="warning">
           <strong>Demo mode.</strong> Google Places is not connected, so discovery returns clearly-labelled

@@ -264,10 +264,12 @@ export interface SystemStatus {
   pendingApprovals: number;
   demoLeads: number;
   liveLeads: number;
+  launchBlockers: { key: string; title: string; detail: string }[];
 }
 
 export interface OverviewMetrics {
   totalLeads: number;
+  contactableLeads: number;
   qualifiedLeads: number;
   highOpportunityLeads: number;
   pendingApprovals: number;
