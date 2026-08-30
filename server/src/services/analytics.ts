@@ -247,6 +247,14 @@ export interface SystemStatus {
 }
 
 /**
+ * Automatic delivery is not the only way to launch, and a list of blockers that
+ * does not say so reads as "you are stuck" when the operator could start today.
+ */
+const MANUAL_ROUTE =
+  ' Until one is working you can still launch by hand: approve a message, send it from your own' +
+  ' mailbox, and record it with “I sent this myself”.';
+
+/**
  * What is missing before outreach can actually reach a business.
  *
  * Each entry is a fact about this deployment, not advice: an operator can read
@@ -260,7 +268,8 @@ function launchBlockers(settings: PlatformSettings): SystemStatus['launchBlocker
       key: 'email_transport',
       title: 'No email transport is connected',
       detail:
-        'Connect Resend (delivers over HTTPS, works on hosts that block SMTP ports) or the SMTP connector in Integrations. Without one, an approved message stays queued.',
+        'Connect Resend (delivers over HTTPS, works on hosts that block SMTP ports) or the SMTP connector in Integrations. Without one, an approved message stays queued.' +
+        MANUAL_ROUTE,
     });
   } else if (!isHealthy('resend') && !isHealthy('gmail')) {
     // Connected is not the same as working: a host that blocks SMTP ports
@@ -269,7 +278,7 @@ function launchBlockers(settings: PlatformSettings): SystemStatus['launchBlocker
     blockers.push({
       key: 'email_transport_failing',
       title: 'The connected email transport is failing',
-      detail: `${reason} Use Test connection in Integrations after fixing it.`,
+      detail: `${reason} Use Test connection in Integrations after fixing it.${MANUAL_ROUTE}`,
     });
   }
   if (!env.outboundSendingEnabled) {
