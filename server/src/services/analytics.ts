@@ -2,7 +2,7 @@ import { db } from '../db';
 import { serviceByKey } from '../domain/services';
 import { getSettings } from './settings';
 import { llmAvailable } from '../llm/provider';
-import { isHealthy } from './integrations';
+import { isHealthy, lastIntegrationError } from './integrations';
 import { emailDeliveryAvailable } from '../tools/emailDelivery';
 import { env } from '../config/env';
 import type { PlatformSettings } from './settings';
@@ -261,6 +261,15 @@ function launchBlockers(settings: PlatformSettings): SystemStatus['launchBlocker
       title: 'No email transport is connected',
       detail:
         'Connect Resend (delivers over HTTPS, works on hosts that block SMTP ports) or the SMTP connector in Integrations. Without one, an approved message stays queued.',
+    });
+  } else if (!isHealthy('resend') && !isHealthy('gmail')) {
+    // Connected is not the same as working: a host that blocks SMTP ports
+    // leaves the connector switched on while every attempt times out.
+    const reason = lastIntegrationError('resend') ?? lastIntegrationError('gmail') ?? 'the last attempt failed';
+    blockers.push({
+      key: 'email_transport_failing',
+      title: 'The connected email transport is failing',
+      detail: `${reason} Use Test connection in Integrations after fixing it.`,
     });
   }
   if (!env.outboundSendingEnabled) {

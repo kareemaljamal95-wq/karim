@@ -258,6 +258,11 @@ export function isHealthy(key: IntegrationKey): boolean {
   return !readRow(key)?.last_error;
 }
 
+/** The reason the last check failed, or null when it succeeded. */
+export function lastIntegrationError(key: IntegrationKey): string | null {
+  return (readRow(key)?.last_error as string) ?? null;
+}
+
 export function listIntegrations(): IntegrationView[] {
   ensureIntegrationRows();
   return INTEGRATION_CATALOG.map((entry) => {
