@@ -14,9 +14,9 @@ import path from 'node:path';
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-ceo-messages-test-'));
 process.env.DATA_DIR = dir;
 process.env.DATABASE_FILE = path.join(dir, 'test.db');
-// The environment kill-switch is the outermost gate; leave it on here so the
-// inner gates are the thing under test.
-process.env.OUTBOUND_SENDING_ENABLED = 'true';
+// The environment lock forces sending off regardless of settings; leave it
+// unset here so the inner gates are the thing under test.
+delete process.env.OUTBOUND_SENDING_LOCKED;
 
 // Required after the environment is set, so config resolves the temp database.
 // eslint-disable-next-line @typescript-eslint/no-var-requires

@@ -90,9 +90,8 @@ and on a message already marked sent.
 
 In this order, and not before a message to yourself has arrived:
 
-1. Railway → Variables → `OUTBOUND_SENDING_ENABLED=true`, then redeploy
-2. **Settings** → turn on outbound sending
-3. Keep the daily cap low at first — a new sending domain that opens with fifty
+1. **Settings** → turn on outbound sending
+2. Keep the daily cap low at first — a new sending domain that opens with fifty
    messages gets treated as spam
 
 Four conditions must then all hold for anything to leave: a human approved it,

@@ -61,9 +61,11 @@ export function getSettings(): PlatformSettings {
   const stored = parseJson<Partial<PlatformSettings>>(row?.value, {});
   const merged = { ...DEFAULTS, ...stored };
 
-  // Environment kill-switches always win over stored settings — a stored
-  // `true` can never enable sending if the deployment disabled it.
-  merged.outboundSendingEnabled = merged.outboundSendingEnabled && env.outboundSendingEnabled;
+  // The stored setting decides whether sending is on. The environment lock can
+  // still force it off, but only when it is deliberately set — an operator
+  // locking down someone else's deployment. Nothing else in the environment
+  // gets a vote, so the owner can switch sending on from the platform itself.
+  if (env.outboundSendingLocked) merged.outboundSendingEnabled = false;
   merged.marketingDomain = (env.marketingDomain || merged.marketingDomain).trim().toLowerCase();
   return merged;
 }

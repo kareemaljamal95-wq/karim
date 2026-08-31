@@ -73,7 +73,18 @@ export const env = {
    * approved message is only dispatched when a channel integration is
    * connected AND this flag is explicitly enabled.
    */
-  outboundSendingEnabled: bool(process.env.OUTBOUND_SENDING_ENABLED, false),
+  /**
+   * Hard lock on outbound sending, for deployments where the person running the
+   * infrastructure is not the person running the business. Set it and no
+   * setting can turn sending on. Left unset — the normal case, where the owner
+   * is the operator — the Settings toggle decides, because an owner who cannot
+   * reach the hosting dashboard would otherwise be locked out of their own
+   * platform with no way back in.
+   *
+   * This replaces OUTBOUND_SENDING_ENABLED, which required the variable AND the
+   * setting and so made the hosting dashboard a second, invisible switch.
+   */
+  outboundSendingLocked: bool(process.env.OUTBOUND_SENDING_LOCKED, false),
 
   corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:5173',
   /**

@@ -281,11 +281,12 @@ function launchBlockers(settings: PlatformSettings): SystemStatus['launchBlocker
       detail: `${reason} Use Test connection in Integrations after fixing it.${MANUAL_ROUTE}`,
     });
   }
-  if (!env.outboundSendingEnabled) {
+  if (env.outboundSendingLocked) {
     blockers.push({
-      key: 'environment_switch',
-      title: 'Sending is disabled in the environment',
-      detail: 'Set OUTBOUND_SENDING_ENABLED=true where the app is deployed, then redeploy.',
+      key: 'environment_lock',
+      title: 'Sending is locked in the environment',
+      detail:
+        'OUTBOUND_SENDING_LOCKED is set where the app is deployed, so no setting can turn sending on. Remove it and redeploy.',
     });
   }
   if (!settings.outboundSendingEnabled) {

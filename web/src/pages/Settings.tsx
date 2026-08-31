@@ -146,7 +146,7 @@ export function SettingsPage() {
             onChange={(value) => update('outboundSendingEnabled', value)}
             disabled={!can('admin')}
             label="Allow approved messages to be dispatched"
-            description="Off by default. With this off, approved messages are queued and never delivered. The OUTBOUND_SENDING_ENABLED environment variable can override this to off regardless of what is set here."
+            description="Off by default. With this off, approved messages are queued and never delivered. Each message still needs its own human approval and a connected channel before it can leave."
           />
           <Toggle
             checked

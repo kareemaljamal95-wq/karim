@@ -145,7 +145,7 @@ if (require.main === module) {
     console.log(
       `AI CEO platform API listening on http://localhost:${env.port}` +
         `\n  Demo mode: ${env.demoMode ? 'on' : 'off'} | Outbound sending: ${
-          env.outboundSendingEnabled ? 'ENABLED' : 'disabled (MVP default)'
+          getSettings().outboundSendingEnabled ? 'ENABLED' : 'disabled'
         }`,
     );
     seedDemoDataIfRequested();

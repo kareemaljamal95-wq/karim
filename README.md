@@ -47,7 +47,7 @@ This is the part that matters most, and it is enforced in code rather than in pr
 leave the platform:
 
 1. a human approved it,
-2. `OUTBOUND_SENDING_ENABLED=true` in the environment **and** the Settings toggle is on,
+2. outbound sending is switched on in **Settings**,
 3. the channel's integration is connected, and
 4. the day's outreach cap still has room.
 
@@ -230,9 +230,8 @@ or an approval kind changes what the next run does.
 ## Enabling real outreach
 
 1. Connect a channel (Gmail or WhatsApp Business) in **Integrations**.
-2. Set `OUTBOUND_SENDING_ENABLED=true` and restart.
-3. Turn on sending in **Settings**.
-4. Fill in company identity, approved claims and the pricing policy so the agents have real
+2. Turn on sending in **Settings**.
+3. Fill in company identity, approved claims and the pricing policy so the agents have real
    boundaries to work within.
 
 Messages still require per-message human approval, and a fourth gate applies: the daily outreach cap
