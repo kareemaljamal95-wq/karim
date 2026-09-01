@@ -75,7 +75,12 @@ export const DEFAULT_WORKFLOW: WorkflowDefinition = {
       type: 'condition',
       label: 'Qualified for outreach?',
       description: 'Only leads above the score threshold with a usable contact channel continue.',
-      config: { field: 'leadScore', operator: '>=', value: 60 },
+      // 60 was set against demo data, whose scores are generous. Real leads top
+      // out in the forties — 46 across the first hundred discovered — so the
+      // gate never opened once on live data and the outreach half of the
+      // platform sat idle. 35 selects roughly the strongest tenth, and every
+      // one of those has a phone or an email.
+      config: { field: 'leadScore', operator: '>=', value: 35 },
     },
     {
       id: 'draft',
@@ -145,6 +150,29 @@ function mapWorkflow(row: Record<string, unknown>): Workflow {
  * only rewires a graph that still matches the shipped shape in that region —
  * a workflow an operator has edited is left exactly as they left it.
  */
+/**
+ * Lowers a qualification threshold no real lead can reach.
+ *
+ * Only the shipped 60 is touched. An operator who has tuned the number to
+ * anything else has made a judgement about their own market, and this must not
+ * overrule it.
+ */
+function relaxUnreachableThreshold(): void {
+  const row = db().prepare('SELECT id, definition FROM workflows WHERE is_default = 1').get() as
+    | { id: string; definition: string }
+    | undefined;
+  if (!row) return;
+
+  const definition = parseJson<WorkflowDefinition>(row.definition, { nodes: [], edges: [] });
+  const gate = definition.nodes.find((node) => node.id === 'qualify' && node.type === 'condition');
+  if (!gate || gate.config?.value !== 60 || gate.config?.field !== 'leadScore') return;
+
+  gate.config = { ...gate.config, value: 35 };
+  db()
+    .prepare('UPDATE workflows SET definition = @definition, updated_at = @updated_at WHERE id = @id')
+    .run({ id: row.id, definition: toJson(definition), updated_at: nowIso() });
+}
+
 function addVerificationStep(): void {
   const row = db().prepare('SELECT id, definition FROM workflows WHERE is_default = 1').get() as
     | { id: string; definition: string }
@@ -177,6 +205,7 @@ export function seedWorkflows(): void {
   const existing = db().prepare('SELECT COUNT(*) AS c FROM workflows').get() as { c: number };
   if (existing.c > 0) {
     addVerificationStep();
+    relaxUnreachableThreshold();
     return;
   }
   const now = nowIso();
