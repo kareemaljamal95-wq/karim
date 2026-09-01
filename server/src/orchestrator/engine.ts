@@ -35,6 +35,8 @@ export interface DiscoveryRunInput {
   workflowId?: string | null;
   /** Skip drafting outreach — research only. */
   draftOutreach?: boolean;
+  /** Discover only businesses that publish a way to contact them. */
+  contactableOnly?: boolean;
   actor: string;
 }
 
@@ -157,6 +159,7 @@ export async function runDiscoveryWorkflow(input: DiscoveryRunInput): Promise<Di
               area: input.area,
               category: input.category,
               limit: input.limit ?? (node.config?.limit as number) ?? 12,
+              contactableOnly: input.contactableOnly ?? (node.config?.contactableOnly as boolean),
             },
             { runId },
           ),

@@ -17,6 +17,7 @@ import { listApprovals } from '../services/approvals';
 import { listLogs } from '../services/logger';
 import { runOutreachAgent } from '../agents/outreachAgent';
 import { verifyLeadWebsite } from '../orchestrator/verifyLead';
+import { verifyLeadWebsites } from '../orchestrator/verifyLeadBatch';
 import { createMessage } from '../services/messages';
 import { createApproval } from '../services/approvals';
 import { serviceByKey } from '../domain/services';
@@ -162,6 +163,26 @@ leadsRouter.post(
   asyncHandler(async (req, res) => {
     const result = await verifyLeadWebsite(req.params.id, actorOf(req));
     res.json(result);
+  }),
+);
+
+const batchVerifySchema = z.object({
+  /** Defaults to true: the reason to run this is to gain a way to reach someone. */
+  missingContactOnly: z.boolean().optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+});
+
+/**
+ * Visits the websites of many leads at once, to turn leads with no contact
+ * details into leads that can be approached. Same read-only errand as the
+ * single-lead check, repeated — it cannot contact anyone.
+ */
+leadsRouter.post(
+  '/verify-websites',
+  requireAnalyst,
+  asyncHandler(async (req, res) => {
+    const input = batchVerifySchema.parse(req.body ?? {});
+    res.json(await verifyLeadWebsites(input, actorOf(req)));
   }),
 );
 

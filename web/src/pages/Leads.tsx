@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Download, Plus, Search, Users } from 'lucide-react';
+import { Download, Plus, Search, Users, Globe } from 'lucide-react';
 import { api, downloadCsv } from '../lib/api';
 import { useAction, useAuth, useQuery } from '../lib/hooks';
 import { compactCurrency, relativeTime } from '../lib/format';
@@ -62,6 +62,28 @@ export function LeadsPage() {
   }, [params, page]);
 
   const { data, loading, error, refetch } = useQuery<LeadsResponse>(query);
+  const { run: runVerify, pending: verifying } = useAction();
+
+  /**
+   * Visits the websites of leads with no email on record. Discovery knows a
+   * business exists; its own site is usually where the address to write to is
+   * published, so this is what turns a list into people who can be approached.
+   */
+  const verifyWebsites = () =>
+    runVerify<{ candidates: number; inspected: number; emailsFound: number; failures: unknown[] }>(
+      () => api('/leads/verify-websites', { method: 'POST', body: { missingContactOnly: true, limit: 25 } }),
+      {
+        onSuccess: (result) => {
+          refetch();
+          if (result) {
+            const note = result.candidates
+              ? `Checked ${result.inspected} website(s) — ${result.emailsFound} new email address(es) found`
+              : 'No leads with a website are missing an email address.';
+            runVerify(async () => result, { success: note });
+          }
+        },
+      },
+    );
 
   const setFilter = (key: string, value: string) => {
     const next = new URLSearchParams(params);
@@ -88,6 +110,18 @@ export function LeadsPage() {
               <Download className="h-4 w-4" />
               Export CSV
             </button>
+            {can('analyst') && (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={verifyWebsites}
+                disabled={verifying}
+                title="Visit the websites of leads with no email, and collect the address they publish"
+              >
+                <Globe className="h-4 w-4" />
+                {verifying ? 'Checking…' : 'Find contacts'}
+              </button>
+            )}
             {can('operator') && (
               <button type="button" className="btn-primary" onClick={() => setShowCreate(true)}>
                 <Plus className="h-4 w-4" />

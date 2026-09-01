@@ -54,6 +54,14 @@ export interface OsmSearchParams {
   area?: string;
   category: string;
   limit?: number;
+  /**
+   * Return only businesses that publish a website, phone or email.
+   *
+   * Off, a short batch is topped up with whatever else is mapped nearby, which
+   * is worth recording but cannot be approached. An operator hunting for people
+   * to talk to today wants the batch spent entirely on reachable ones.
+   */
+  contactableOnly?: boolean;
 }
 
 /**
@@ -422,7 +430,7 @@ export async function searchOpenStreetMap(
     const payload = await queryOverpass(overpassQuery(selectors, box, limit, true));
     const found = new Map((payload.elements ?? []).map((el) => [`${el.type}/${el.id}`, el]));
 
-    if (found.size < limit) {
+    if (found.size < limit && !params.contactableOnly) {
       const filler = await queryOverpass(overpassQuery(selectors, box, limit - found.size, false));
       for (const element of filler.elements ?? []) {
         const key = `${element.type}/${element.id}`;

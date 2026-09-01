@@ -34,6 +34,7 @@ const searchSchema = z.object({
   limit: z.number().int().min(1).max(40).optional(),
   workflowId: z.string().optional(),
   draftOutreach: z.boolean().optional(),
+  contactableOnly: z.boolean().optional(),
 });
 
 /**

@@ -60,6 +60,7 @@ export function MarketResearchPage() {
     category: 'Restaurants',
     limit: 10,
     draftOutreach: true,
+    contactableOnly: true,
   });
   const [summary, setSummary] = useState<DiscoveryRunSummary | null>(null);
 
@@ -85,6 +86,7 @@ export function MarketResearchPage() {
             category: form.category,
             limit: Number(form.limit),
             draftOutreach: form.draftOutreach,
+            contactableOnly: form.contactableOnly,
           },
         }),
       { success: 'Research run finished' },
@@ -169,6 +171,22 @@ export function MarketResearchPage() {
                 onChange={(e) => setForm({ ...form, limit: Number(e.target.value) })}
               />
             </Field>
+
+            <label className="flex items-start gap-2.5 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                checked={form.contactableOnly}
+                onChange={(e) => setForm({ ...form, contactableOnly: e.target.checked })}
+              />
+              <span className="text-slate-700 dark:text-slate-300">
+                Only businesses you can contact
+                <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
+                  Off, a short batch is topped up with businesses that publish no website, phone or
+                  email — worth recording, but nobody you can approach today.
+                </span>
+              </span>
+            </label>
 
             <label className="flex items-start gap-2.5 text-sm">
               <input

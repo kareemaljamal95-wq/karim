@@ -93,6 +93,11 @@ export interface DiscoveryParams {
   area?: string;
   category: string;
   limit?: number;
+  /**
+   * Ask the source for businesses that publish a way to contact them. Sources
+   * that cannot express this simply ignore it, so a run never fails over it.
+   */
+  contactableOnly?: boolean;
   runId?: string | null;
 }
 

@@ -11,6 +11,8 @@ export interface ScoutInput {
   area?: string;
   category: string;
   limit?: number;
+  /** Spend the batch only on businesses that can actually be approached. */
+  contactableOnly?: boolean;
 }
 
 const SOURCE_LABELS: Record<DiscoverySource, string> = {
@@ -55,6 +57,7 @@ export async function runMarketScout(
     area: input.area,
     category: input.category,
     limit,
+    contactableOnly: input.contactableOnly,
     runId: ctx.runId,
   });
 
